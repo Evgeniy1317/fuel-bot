@@ -1,0 +1,186 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Locale {
+  ru
+  ro
+}
+
+/// Рынок, а не город: пользователь выбирает ПМР или Молдову.
+enum CountryCode {
+  PMR
+  MD
+}
+
+enum FuelKind {
+  AI92
+  AI95
+  AI98
+  DIESEL
+  LPG
+}
+
+/// Чем заправляется авто пользователя.
+enum VehiclePropulsion {
+  GASOLINE
+  LPG
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  /// Бесплатный месяц по гарантии прогноза (пользователю это не называем «ошибкой»).
+  COMPLIMENTARY
+  EXPIRED
+  CANCELED
+}
+
+enum AlertKind {
+  PRICE_UP
+  PRICE_DOWN
+  PREDICTED_HIKE
+}
+
+enum AlertOutcome {
+  PENDING
+  HIT
+  MISS
+  WAIVED
+}
+
+enum PriceSource {
+  API
+  NEWS_SITE
+  TG_CHANNEL
+  MANUAL
+}
+
+model User {
+  id             String    @id @default(cuid())
+  telegramId     String    @unique
+  username       String?
+  firstName      String?
+  locale         Locale    @default(ru)
+  country        CountryCode?
+  dailyKm        Decimal?  @db.Decimal(8, 1)
+  /// Какие цены пользователь хочет видеть в алертах (мультивыбор).
+  watchFuels     FuelKind[]
+  onboardedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  vehicle        Vehicle?
+  subscription   Subscription?
+  alerts         Alert[]
+  savings        SavingsRecord[]
+
+  @@index([country])
+}
+
+model Vehicle {
+  id              String             @id @default(cuid())
+  userId          String             @unique
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  brand           String
+  model           String
+  litersPer100km  Decimal            @db.Decimal(5, 2)
+  propulsion      VehiclePropulsion
+  /// Какой бензин реально заливает (для GASOLINE). Для LPG можно оставить LPG.
+  fillGrade       FuelKind
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+}
+
+model Region {
+  id           String      @id @default(cuid())
+  country      CountryCode @unique
+  nameRu       String
+  nameRo       String
+  currencyCode String
+  prices       PriceHistory[]
+}
+
+model PriceHistory {
+  id           String      @id @default(cuid())
+  regionId     String
+  region       Region      @relation(fields: [regionId], references: [id])
+  fuel         FuelKind
+  amount       Decimal     @db.Decimal(10, 3)
+  currencyCode String
+  source       PriceSource
+  sourceRef    String?
+  observedAt   DateTime    @default(now())
+  publishedAt  DateTime?
+
+  @@index([regionId, fuel, observedAt])
+}
+
+model Alert {
+  id                    String        @id @default(cuid())
+  userId                String
+  user                  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind                  AlertKind
+  fuel                  FuelKind
+  country               CountryCode
+  predictedAmount       Decimal?      @db.Decimal(10, 3)
+  actualAmount          Decimal?      @db.Decimal(10, 3)
+  currencyCode          String
+  /// Готовая структура алерта (цена, топливо, регион) — не сырой текст новости.
+  payload               Json
+  outcome               AlertOutcome  @default(PENDING)
+  predictionWindowEndsAt DateTime?
+  sentAt                DateTime      @default(now())
+  resolvedAt            DateTime?
+
+  @@index([userId, sentAt])
+  @@index([outcome, predictionWindowEndsAt])
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  userId               String             @unique
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status               SubscriptionStatus @default(TRIAL)
+  trialEndsAt          DateTime
+  currentPeriodEndsAt  DateTime?
+  starsChargeId        String?
+  /// Внутренняя причина комплементарного месяца. Пользователю не показываем.
+  complimentaryReason  String?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+}
+
+model SavingsRecord {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount       Decimal  @db.Decimal(12, 2)
+  currencyCode String
+  liters       Decimal  @db.Decimal(10, 2)
+  periodStart  DateTime
+  periodEnd    DateTime
+  meta         Json?
+  createdAt    DateTime @default(now())
+
+  @@index([userId, periodStart])
+  @@index([amount])
+}
+
+/// Идемпотентность live-алертов: одно сообщение канала / страница → одна обработка.
+model NewsEvent {
+  id           String      @id @default(cuid())
+  source       PriceSource
+  externalId   String
+  country      CountryCode?
+  rawText      String
+  extracted    Json?
+  processedAt  DateTime    @default(now())
+
+  @@unique([source, externalId])
+}
