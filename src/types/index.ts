@@ -1,4 +1,5 @@
 export type { AlertKind, AlertPayload, ExtractedPrice } from "./alert";
+export type { OfficialPrice, PriceKind } from "./price";
 export type {
   CountryCode,
   FuelKind,

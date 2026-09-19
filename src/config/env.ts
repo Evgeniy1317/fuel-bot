@@ -4,9 +4,10 @@ import { z } from "zod";
 const envSchema = z.object({
   BOT_TOKEN: z.string().min(1),
   DATABASE_URL: z.string().min(1),
+  DIRECT_URL: z.string().min(1),
   NODE_ENV: z.enum(["development", "production"]).default("development"),
   TZ: z.string().default("Europe/Chisinau"),
-  TRIAL_DAYS: z.coerce.number().int().positive().default(7),
+  TRIAL_DAYS: z.coerce.number().int().positive().default(3),
   SUBSCRIPTION_STARS: z.coerce.number().int().positive(),
   SUBSCRIPTION_TITLE: z.string().default("Заправься умно"),
   SUBSCRIPTION_PAYLOAD: z.string().default("fuel_bot_month"),
@@ -35,6 +36,15 @@ const envSchema = z.object({
       (value ?? "")
         .split(",")
         .map((url) => url.trim())
+        .filter(Boolean),
+    ),
+  TELEGRAM_PREVIEW_CHANNELS: z
+    .string()
+    .default("pridnestrovec,anre_md")
+    .transform((value) =>
+      value
+        .split(",")
+        .map((name) => name.trim().replace(/^@/, ""))
         .filter(Boolean),
     ),
   LOG_CHAT_ID: z.string().optional(),

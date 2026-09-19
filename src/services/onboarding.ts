@@ -1,6 +1,5 @@
 import { userRepo } from "../repositories/user.repo";
 import { vehicleRepo } from "../repositories/vehicle.repo";
-import { subscriptionService } from "./subscription";
 import type { OnboardingDraft } from "../types";
 
 export const onboardingService = {
@@ -46,7 +45,6 @@ export const onboardingService = {
       fillGrade: draft.fillGrade!,
     });
 
-    await subscriptionService.startTrial(user.id);
     return user;
   },
 };

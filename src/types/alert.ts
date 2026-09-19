@@ -12,6 +12,8 @@ export interface AlertPayload {
   previousAmount?: number;
   delta?: number;
   windowHours?: number;
+  /** Соседний рынок / мягкий намёк — без суммы в гарантии. */
+  advisory?: boolean;
 }
 
 export interface ExtractedPrice {
@@ -21,4 +23,5 @@ export interface ExtractedPrice {
   currencyCode: "MDL" | "PRB";
   confidence: number;
   publishedAt?: Date;
+  predicted?: boolean;
 }

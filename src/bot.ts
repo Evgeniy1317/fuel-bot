@@ -10,6 +10,7 @@ import { registerSubscription } from "./bot/handlers/subscription";
 import { registerLeaderboard } from "./bot/handlers/leaderboard";
 import { registerSettings } from "./bot/handlers/settings";
 import { registerChannelIngest } from "./bot/handlers/channel-ingest";
+import { registerAdmin } from "./bot/handlers/admin";
 
 export function createBot() {
   const bot = new Bot<BotContext>(env.BOT_TOKEN);
@@ -24,6 +25,7 @@ export function createBot() {
   registerMenu(bot);
   registerSubscription(bot);
   registerLeaderboard(bot);
+  registerAdmin(bot);
 
   bot.catch((error) => {
     console.error("bot error", error);

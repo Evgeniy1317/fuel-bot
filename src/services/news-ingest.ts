@@ -5,7 +5,8 @@ import { newsEventRepo } from "../repositories/news-event.repo";
 import { priceRepo } from "../repositories/price.repo";
 import { alertService } from "./alerts";
 import { priceExtractor } from "./price-extractor";
-import type { OfficialPrice } from "./price-provider";
+import { predictionService } from "./prediction";
+import type { OfficialPrice } from "../types/price";
 import type { AlertKind } from "../types";
 
 export interface NewsIngestInput {
@@ -13,12 +14,9 @@ export interface NewsIngestInput {
   externalId: string;
   rawText: string;
   channelId?: string;
+  skipAlerts?: boolean;
 }
 
-/**
- * Точка входа live-пайплайна:
- * новость → дедуп → извлечь цены → сохранить → сразу разослать алерты.
- */
 export const newsIngestService = {
   isWatchedChannel(channelId: string) {
     return env.NEWS_CHANNEL_IDS.includes(channelId);
@@ -44,7 +42,24 @@ export const newsIngestService = {
       extracted,
     });
 
+    if (input.skipAlerts) {
+      return { skipped: true as const, extracted };
+    }
+
     for (const price of extracted) {
+      if (price.predicted) {
+        await alertService.dispatch({
+          bot,
+          kind: "PREDICTED_HIKE",
+          country: price.country,
+          fuel: price.fuel,
+          amount: price.amount,
+          currencyCode: price.currencyCode,
+          windowHours: 24,
+        });
+        continue;
+      }
+
       const previous = await priceRepo.latest(price.country, price.fuel);
       await priceRepo.insert({
         country: price.country,
@@ -69,15 +84,17 @@ export const newsIngestService = {
         amount: price.amount,
         currencyCode: price.currencyCode,
         previousAmount: previous ? Number(previous.amount) : undefined,
-        windowHours: kind === "PREDICTED_HIKE" ? 24 : undefined,
       });
+    }
+
+    if (priceExtractor.isMoldovaTomorrowHike(input.rawText, input.channelId)) {
+      await predictionService.pmrHeadsUp(bot);
     }
 
     return { skipped: false as const, extracted };
   },
 
-  /** Официальные API: цены уже структурированы, экстрактор не нужен. */
-  async ingestOfficial(bot: Bot<BotContext>, prices: OfficialPrice[]) {
+  async ingestSpot(bot: Bot<BotContext>, prices: OfficialPrice[]) {
     for (const price of prices) {
       const previous = await priceRepo.latest(price.country, price.fuel);
       if (previous && Number(previous.amount) === price.amount) {
@@ -89,9 +106,14 @@ export const newsIngestService = {
         fuel: price.fuel,
         amount: price.amount,
         currencyCode: price.currencyCode,
-        source: "API",
+        source: price.country === "MD" ? "API" : "NEWS_SITE",
+        sourceRef: price.kind ?? "SPOT",
         publishedAt: price.observedAt,
       });
+
+      if (!previous) {
+        continue;
+      }
 
       const kind: AlertKind = inferKind(
         price.amount,
@@ -109,11 +131,13 @@ export const newsIngestService = {
       });
     }
   },
+
+  async ingestCeiling(bot: Bot<BotContext>, prices: OfficialPrice[]) {
+    await predictionService.ingestCeiling(bot, prices);
+  },
 };
 
 function inferKind(amount: number, previous?: number): AlertKind {
-  // TODO: отдельный классификатор «прогноз повышения» vs факт
-  // (слова «с завтра», «подорожает», время публикации vs вступления в силу)
   if (previous === undefined) {
     return "PRICE_UP";
   }

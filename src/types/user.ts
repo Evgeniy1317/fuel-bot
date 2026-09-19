@@ -9,6 +9,7 @@ export type OnboardingStep =
   | "consumption"
   | "daily_km"
   | "watch_fuels"
+  | "trial_consent"
   | "done";
 
 export interface OnboardingDraft {

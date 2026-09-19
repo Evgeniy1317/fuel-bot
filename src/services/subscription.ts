@@ -36,6 +36,10 @@ export const subscriptionService = {
   },
 
   async startTrial(userId: string) {
+    const existing = await subscriptionRepo.getByUserId(userId);
+    if (existing) {
+      return existing;
+    }
     return subscriptionRepo.startTrial(userId, this.trialEndsAt());
   },
 

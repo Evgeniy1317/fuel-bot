@@ -1,8 +1,23 @@
+import { createServer } from "http";
 import { createBot } from "./bot";
 import { prisma } from "./lib/prisma";
 import { startJobs } from "./jobs";
 
+function listenHealth() {
+  const port = Number(process.env.PORT);
+  if (!Number.isFinite(port) || port <= 0) {
+    return;
+  }
+  createServer((_req, res) => {
+    res.writeHead(200, { "content-type": "text/plain" });
+    res.end("ok");
+  }).listen(port, () => {
+    console.log(`health on :${port}`);
+  });
+}
+
 async function main() {
+  listenHealth();
   const bot = createBot();
   startJobs(bot);
 

@@ -39,6 +39,13 @@ export function watchFuelsKeyboard(locale: Locale, selected: FuelKind[]) {
   return kb;
 }
 
+export function trialKeyboard(locale: Locale) {
+  return new InlineKeyboard()
+    .text(t(locale, "onboarding.trialYes"), "trial:yes")
+    .row()
+    .text(t(locale, "onboarding.trialNo"), "trial:no");
+}
+
 export function menuKeyboard(locale: Locale) {
   return new Keyboard()
     .text(t(locale, "menu.savings"))

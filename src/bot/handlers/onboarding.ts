@@ -1,6 +1,9 @@
 import type { Bot } from "grammy";
 import { GASOLINE_GRADES } from "../../config/constants";
 import { onboardingService } from "../../services/onboarding";
+import { subscriptionService } from "../../services/subscription";
+import { adminNotify, formatUser } from "../../services/admin-notify";
+import { userRepo } from "../../repositories/user.repo";
 import type { FuelKind, Locale, VehiclePropulsion } from "../../types";
 import type { BotContext } from "../context";
 import { t } from "../i18n";
@@ -9,6 +12,7 @@ import {
   fillGradeKeyboard,
   menuKeyboard,
   propulsionKeyboard,
+  trialKeyboard,
   watchFuelsKeyboard,
 } from "../keyboards";
 
@@ -161,7 +165,7 @@ export function registerOnboarding(bot: Bot<BotContext>) {
       if (!draft.watchFuels?.length && draft.fillGrade) {
         draft.watchFuels = [draft.fillGrade];
       }
-      draft.step = "done";
+      draft.step = "trial_consent";
       ctx.session.onboarding = draft;
 
       const telegramId = ctx.from?.id.toString();
@@ -173,8 +177,8 @@ export function registerOnboarding(bot: Bot<BotContext>) {
         );
       }
 
-      await ctx.reply(t(locale, "onboarding.done"), {
-        reply_markup: menuKeyboard(locale),
+      await ctx.reply(t(locale, "onboarding.trialAsk"), {
+        reply_markup: trialKeyboard(locale),
       });
       return;
     }
@@ -190,6 +194,51 @@ export function registerOnboarding(bot: Bot<BotContext>) {
     ctx.session.onboarding = draft;
     await ctx.editMessageReplyMarkup({
       reply_markup: watchFuelsKeyboard(locale, draft.watchFuels),
+    });
+  });
+
+  bot.callbackQuery(/^trial:(yes|no)$/, async (ctx) => {
+    const locale = ctx.session.locale;
+    const telegramId = ctx.from?.id.toString();
+    await ctx.answerCallbackQuery();
+
+    if (ctx.match[1] === "no") {
+      if (ctx.session.onboarding) {
+        ctx.session.onboarding.step = "done";
+      }
+      await ctx.reply(t(locale, "onboarding.trialDeclined"), {
+        reply_markup: menuKeyboard(locale),
+      });
+      return;
+    }
+
+    if (telegramId) {
+      const user = await userRepo.findByTelegramId(telegramId);
+      if (!user) {
+        await ctx.reply(t(locale, "errors.generic"));
+        return;
+      }
+      if (user.subscription) {
+        await ctx.reply(
+          subscriptionService.hasAccess(user.subscription)
+            ? t(locale, "subscription.trial")
+            : t(locale, "subscription.expired"),
+          { reply_markup: menuKeyboard(locale) },
+        );
+        return;
+      }
+      await subscriptionService.startTrial(user.id);
+      await adminNotify.send(
+        ctx.api,
+        `Триал 3 дня\n${formatUser(user)}`,
+      );
+    }
+
+    if (ctx.session.onboarding) {
+      ctx.session.onboarding.step = "done";
+    }
+    await ctx.reply(t(locale, "onboarding.done"), {
+      reply_markup: menuKeyboard(locale),
     });
   });
 }

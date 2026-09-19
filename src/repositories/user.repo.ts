@@ -60,4 +60,11 @@ export const userRepo = {
       include: { subscription: true },
     });
   },
+
+  async findOnboardedByCountry(country: CountryCode) {
+    return prisma.user.findMany({
+      where: { country, onboardedAt: { not: null } },
+      include: { subscription: true },
+    });
+  },
 };

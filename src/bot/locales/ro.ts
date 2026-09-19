@@ -3,7 +3,7 @@ import type { Messages } from "./ru";
 export const ro: Messages = {
   start: {
     welcome:
-      "Salut! Sunt botul «Alimentează-te inteligent» — te ajut să economisești la combustibil în Transnistria și Moldova.\n\nCâteva întrebări scurte, iar apoi totul merge singur: alerte de preț, buget și sfaturi pentru mașina ta.",
+      "Salut! Sunt botul «Alimentează-te inteligent» — te ajut să economisești la combustibil în Transnistria și Moldova.\n\nCâteva întrebări scurte. Apoi îți pot da 3 zile gratuit: îți scriu în chat dacă merită să alimentezi azi.",
     language: "Выбери язык / Alege limba",
   },
   onboarding: {
@@ -21,8 +21,14 @@ export const ro: Messages = {
     watchFuels:
       "Pentru ce tipuri de combustibil vrei alerte? Poți alege mai multe. Când termini — apasă «Gata».",
     watchDone: "Gata",
-    done: "Gata! Calculez economia pentru mașina și traseul tău. Alertele vin singure, când apar știri despre preț.",
-    skipLong: "Ultimul pas — mai puțin de un minut.",
+    skipLong: "Urmează acordul pentru 3 zile gratuite.",
+    trialAsk:
+      "3 zile gratuit — alerte «merită să alimentezi azi» și calculul pentru mașina ta. Apoi abonament în Stars. Încercăm?",
+    trialYes: "Încerc 3 zile",
+    trialNo: "Mai târziu",
+    trialDeclined:
+      "Ok, profilul e salvat. Când ești gata — apasă «Abonament» sau /subscribe.",
+    done: "Gata. Cele 3 zile de probă sunt pornite: îți scriu în chat când merită să alimentezi azi.",
   },
   menu: {
     title: "Meniu principal",
@@ -34,7 +40,7 @@ export const ro: Messages = {
     language: "Limbă",
   },
   subscription: {
-    trial: "Ai o săptămână gratuită. Apoi — abonament în Stars.",
+    trial: "Ai 3 zile gratuite. Apoi — abonament în Stars.",
     pay: "Activează abonamentul",
     active: "Abonamentul este activ până la {date}.",
     complimentary:
@@ -44,6 +50,10 @@ export const ro: Messages = {
     invoiceDescription: "Alerte personale și calculul economiei pentru o lună",
   },
   alert: {
+    hikeToday:
+      "Merită să alimentezi azi. Mâine {fuel} în {region} — reper {amount} {currency}.",
+    hikeNeighbor:
+      "Alimentează-te azi: mâine se scumpește.",
     hike: "Pentru {fuel} în {region} reperul este {amount} {currency}. Merită să alimentezi în orele următoare.",
     up: "{fuel}: {amount} {currency} ({region}).",
     down: "{fuel} a scăzut la {amount} {currency} ({region}).",

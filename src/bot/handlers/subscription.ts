@@ -3,13 +3,14 @@ import { subscriptionService } from "../../services/subscription";
 import { userRepo } from "../../repositories/user.repo";
 import type { BotContext } from "../context";
 import { t } from "../i18n";
+import { adminNotify, formatUser } from "../../services/admin-notify";
+import { trialKeyboard } from "../keyboards";
 
 export function registerSubscription(bot: Bot<BotContext>) {
-  bot.command("subscribe", sendInvoice);
-  bot.hears(/Подписка|Abonament/, sendInvoice);
+  bot.command("subscribe", sendSubscribe);
+  bot.hears(/Подписка|Abonament/, sendSubscribe);
 
   bot.on("pre_checkout_query", async (ctx) => {
-    // TODO: проверить payload и что пользователь уже прошёл онбординг
     await ctx.answerPreCheckoutQuery(true);
   });
 
@@ -24,25 +25,36 @@ export function registerSubscription(bot: Bot<BotContext>) {
       payment.telegram_payment_charge_id,
     );
     await ctx.reply(t(ctx.session.locale, "subscription.active", { date: "—" }));
+    await adminNotify.send(
+      ctx.api,
+      `Оплата Stars: ${payment.total_amount} XTR\n${formatUser(user)}`,
+    );
   });
 }
 
-async function sendInvoice(ctx: BotContext) {
+async function sendSubscribe(ctx: BotContext) {
   const locale = ctx.session.locale;
   const user = await userRepo.findByTelegramId(String(ctx.from?.id));
   const sub = user?.subscription;
 
-  if (sub && subscriptionService.hasAccess(sub) && sub.status === "TRIAL") {
-    await ctx.reply(t(locale, "subscription.trial"));
+  if (!sub) {
+    await ctx.reply(t(locale, "onboarding.trialAsk"), {
+      reply_markup: trialKeyboard(locale),
+    });
+    return;
   }
 
-  if (sub?.status === "COMPLIMENTARY") {
+  if (sub.status === "COMPLIMENTARY" && subscriptionService.hasAccess(sub)) {
     await ctx.reply(t(locale, "subscription.complimentary"));
     return;
   }
 
+  if (sub.status === "TRIAL" && subscriptionService.hasAccess(sub)) {
+    await ctx.reply(t(locale, "subscription.trial"));
+    return;
+  }
+
   const invoice = subscriptionService.invoice();
-  // Telegram Stars: currency XTR, provider_token не нужен.
   await ctx.replyWithInvoice(
     invoice.title,
     t(locale, "subscription.invoiceDescription"),

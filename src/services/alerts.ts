@@ -8,11 +8,25 @@ import type { Bot } from "grammy";
 import type { BotContext } from "../bot/context";
 import { subscriptionService } from "./subscription";
 
+const recent = new Map<string, number>();
+const DEDUP_MS = 6 * 60 * 60 * 1000;
+
+function alreadySent(key: string) {
+  const prev = recent.get(key);
+  const now = Date.now();
+  if (prev && now - prev < DEDUP_MS) {
+    return true;
+  }
+  recent.set(key, now);
+  return false;
+}
+
 function renderAlert(locale: Locale, payload: AlertPayload, regionName: string) {
   const fuel = FUEL_LABELS[payload.fuel][locale];
-  const key =
-    payload.kind === "PREDICTED_HIKE"
-      ? "alert.hike"
+  const key = payload.advisory
+    ? "alert.hikeNeighbor"
+    : payload.kind === "PREDICTED_HIKE"
+      ? "alert.hikeToday"
       : payload.kind === "PRICE_DOWN"
         ? "alert.down"
         : "alert.up";
@@ -25,9 +39,6 @@ function renderAlert(locale: Locale, payload: AlertPayload, regionName: string) 
   });
 }
 
-/**
- * Живая рассылка: вызывается сразу после ingest новости, не из крона.
- */
 export const alertService = {
   async dispatch(input: {
     bot: Bot<BotContext>;
@@ -38,7 +49,13 @@ export const alertService = {
     currencyCode: string;
     previousAmount?: number;
     windowHours?: number;
+    advisory?: boolean;
   }) {
+    const dedupKey = `${input.country}:${input.fuel}:${input.kind}:${input.advisory ? "adv" : input.amount}`;
+    if (alreadySent(dedupKey)) {
+      return;
+    }
+
     const region = await prisma.region.findUniqueOrThrow({
       where: { country: input.country },
     });
@@ -55,11 +72,15 @@ export const alertService = {
           ? input.amount - input.previousAmount
           : undefined,
       windowHours: input.windowHours,
+      advisory: input.advisory,
     };
 
-    const users = await userRepo.findWatchers(input.country, input.fuel);
+    const users = input.advisory
+      ? await userRepo.findOnboardedByCountry(input.country)
+      : await userRepo.findWatchers(input.country, input.fuel);
+
     const windowEnds =
-      input.kind === "PREDICTED_HIKE"
+      input.kind === "PREDICTED_HIKE" && !input.advisory
         ? new Date(Date.now() + (input.windowHours ?? 24) * 3600 * 1000)
         : undefined;
 
@@ -75,16 +96,19 @@ export const alertService = {
         country: input.country,
         payload,
         currencyCode: input.currencyCode,
-        predictedAmount: input.kind === "PREDICTED_HIKE" ? input.amount : undefined,
+        predictedAmount:
+          input.kind === "PREDICTED_HIKE" && !input.advisory
+            ? input.amount
+            : undefined,
         predictionWindowEndsAt: windowEnds,
       });
 
       const locale = user.locale as Locale;
       const regionName = locale === "ro" ? region.nameRo : region.nameRu;
-      const text = renderAlert(locale, payload, regionName);
-
-      // TODO: не слать дубли, если тот же fuel+amount уже уходил за N минут
-      await input.bot.api.sendMessage(user.telegramId, text);
+      await input.bot.api.sendMessage(
+        user.telegramId,
+        renderAlert(locale, payload, regionName),
+      );
     }
   },
 };

@@ -1,60 +1,28 @@
 # Заправься умно / Alimentează-te inteligent
 
-Telegram-бот — персональный ассистент экономии на бензине для **Приднестровья** и **Молдовы**.
+Telegram-бот в чате — без сайта и без графиков. Пользователь один раз проходит короткий онбординг, соглашается на **3 дня бесплатно**, дальше бот сам пишет в этот же чат: когда лучше заправиться сегодня, какой бюджет на месяц, сколько выходит под его авто.
 
-Пользователь один раз проходит короткий онбординг (язык, регион, авто, расход, км/день, какие цены смотреть). Дальше бот считает экономию, шлёт живые алерты о цене и ведёт топливный бюджет. Подписка — **Telegram Stars**, первая неделя бесплатно.
+Подписка — Telegram Stars.
 
-Это каркас MVP: слои, типы и TODO, без полной бизнес-логики.
+## Откуда цены
+
+- **Молдова, факт:** официальный JSON [ANRE e-Carburanți](https://api.ecarburanti.anre.md/public/) — без HTML.
+- **Молдова, «завтра»:** потолок ANRE с [anre.md](https://anre.md) (редко, раз в 30 мин) + канал `@anre_md`.
+- **ПМР, факт:** прайс [Шерифа](https://sheriff.md/activities/nefteprodukty/ceny_po_regionam/) — один GET раз в 30 мин, пауза, ETag, на 403/429 отлеживаем 6 часов.
+- **ПМР, «завтра»:** посты `@pridnestrovec` («завтра / подорожает») и мягкий намёк, если Молдова уже объявила рост.
+
+Парсить всё подряд не будем — так проще словить бан по IP.
 
 ## Стек
 
-- Node.js 20+ / TypeScript
-- [grammY](https://grammy.dev)
-- PostgreSQL + Prisma (подойдёт и Supabase как хостинг БД)
-- node-cron — фоновые задачи
-- Живые алерты: `channel_post` из Telegram-каналов сразу в момент публикации
+- Node.js 20+ / TypeScript / grammY
+- PostgreSQL + Prisma
+- node-cron
 
-## Структура
-
-```
-src/
-  index.ts                 # точка входа: бот + кроны
-  bot.ts                   # сборка grammY
-  config/                  # env, константы
-  lib/prisma.ts
-  types/                   # общие типы
-  bot/
-    context.ts
-    i18n.ts                # ru / ro
-    locales/
-    keyboards.ts
-    handlers/              # команды и колбэки
-    middlewares/
-  services/                # бизнес-логика (пока скелет)
-    savings.ts             # расчёт экономии под авто
-    budget.ts              # прогноз трат на месяц
-    alerts.ts              # рассылка структурированных алертов
-    news-ingest.ts         # новость → цена → алерт сразу
-    price-extractor.ts     # достаёт цифры, не копирует пост
-    price-provider.ts      # официальные API MD/PMR
-    subscription.ts        # триал + Stars
-    guarantee.ts           # мягкая «гарантия», без жёсткой правды
-    leaderboard.ts
-    onboarding.ts
-  repositories/            # Prisma
-  jobs/                    # API-поллинг, сайты, гарантия, дневной снимок
-prisma/
-  schema.prisma
-  seed.ts                  # регионы ПМР / MD
-```
-
-## Как запустить
-
-1. Скопируй `.env.example` в `.env` и заполни `BOT_TOKEN`, `DATABASE_URL`.
-2. Подними PostgreSQL (локально или connection string из Supabase).
-3. Установи зависимости и примени схему:
+## Запуск
 
 ```bash
+copy .env.example .env
 npm install
 npx prisma generate
 npx prisma migrate dev --name init
@@ -62,24 +30,56 @@ npx prisma db seed
 npm run dev
 ```
 
-Для live-алертов из Telegram-каналов добавь бота **админом** в каналы и перечисли их id в `NEWS_CHANNEL_IDS`.
+Нужны `BOT_TOKEN`, `ADMIN_TELEGRAM_IDS`, `DATABASE_URL` и `DIRECT_URL` (Supabase).
 
-## Онбординг (короткий)
+Админу в личку с ботом приходят уведомления: кто взял триал и кто оплатил Stars. Цифры: команда `/stats`.
 
-1. Язык: русский / română  
-2. Регион: Приднестровье или Молдова  
-3. Марка и модель  
-4. Бензин или газ (+ марка бензина, если бензин)  
-5. Расход л/100 км  
-6. Километры в день  
-7. Какие цены смотреть в алертах (мультивыбор)
+## Supabase
 
-## Что сознательно не дописано
+1. New project.
+2. Settings → Database → Connect.
+3. В `.env`:
+   - `DATABASE_URL` — Session pooler, порт **6543**, в конец `?pgbouncer=true`
+   - `DIRECT_URL` — Direct, порт **5432** (для миграций)
+4. Пароль проекта подставь вместо `PASSWORD`.
 
-- Извлечение цены из текста новости (`price-extractor`)
-- Официальные API Молдовы и ПМР (`price-provider`)
-- Парсинг сайтов (`NEWS_SITE_URLS`)
-- Формула «сэкономлено» для рейтинга
-- Порог «прогноз сбылся / нет» — пользователю промах не озвучиваем, только открываем месяц
+Потом:
 
-Дальше модули можно разбирать по одному.
+```bash
+npx prisma generate
+npx prisma migrate dev --name init
+npx prisma db seed
+npm run dev
+```
+
+## Онбординг
+
+Язык → ПМР или Молдова → авто → бензин/газ → расход → км/день → какие цены смотреть → **согласие на 3 дня**.
+
+Потом бот молчит, пока нечего сказать, и пишет в чат, когда есть смысл заправиться сегодня.
+
+## Хостинг (не Vercel)
+
+Бот — постоянный процесс: опрос Telegram + кроны. **Vercel / Netlify не подходят** (серверлесс гаснет через секунды).
+
+Нужен сервис с всегда включённым Node: **Railway** или Render. База остаётся на Supabase.
+
+### Railway
+
+1. Останови локальный `npm run dev` (два процесса с одним токеном конфликтуют).
+2. Запушь репозиторий на GitHub.
+3. [railway.app](https://railway.app) → New Project → Deploy from GitHub.
+4. Variables — те же, что в `.env` (не загружай сам файл `.env`):
+   - `BOT_TOKEN`
+   - `ADMIN_TELEGRAM_IDS`
+   - `DATABASE_URL`
+   - `DIRECT_URL`
+   - `TRIAL_DAYS=3`
+   - `SUBSCRIPTION_STARS=100`
+   - `SUBSCRIPTION_TITLE`
+   - `SUBSCRIPTION_PAYLOAD`
+   - `TZ=Europe/Chisinau`
+   - `TELEGRAM_PREVIEW_CHANNELS=pridnestrovec,anre_md`
+   - `NODE_ENV=production`
+5. Deploy. В логах должно быть `fuel-bot started`.
+6. Проверка: `/start` в Telegram, когда компьютер выключен.
