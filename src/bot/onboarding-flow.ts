@@ -1,9 +1,5 @@
 import type { BotContext } from "./context";
-import {
-  cityExamples,
-  cityLabel,
-  findCity,
-} from "../config/cities";
+import { cityExamples, resolveCityInput } from "../config/cities";
 import {
   FUEL_LABELS,
   GASOLINE_GRADES,
@@ -18,7 +14,7 @@ import type {
 } from "../types";
 import { t } from "./i18n";
 import {
-  backKeyboard,
+  cityKeyboard,
   countryKeyboard,
   fillGradeKeyboard,
   languageKeyboard,
@@ -226,11 +222,14 @@ export async function promptOnboarding(ctx: BotContext, draft: OnboardingDraft) 
       });
       return;
     case "city": {
-      const examples = draft.country
-        ? cityExamples(draft.country, locale)
-        : "";
-      await ctx.reply(t(locale, "onboarding.city", { examples }), {
-        reply_markup: backKeyboard(locale),
+      if (!draft.country) {
+        await ctx.reply(t(locale, "onboarding.country"), {
+          reply_markup: countryKeyboard(locale),
+        });
+        return;
+      }
+      await ctx.reply(cityPromptText(locale, draft.country), {
+        reply_markup: cityKeyboard(locale, draft.country),
       });
       return;
     }
@@ -270,10 +269,28 @@ export async function promptOnboarding(ctx: BotContext, draft: OnboardingDraft) 
   }
 }
 
+export function cityPromptText(locale: Locale, country: CountryCode) {
+  if (country === "PMR") {
+    return t(locale, "onboarding.cityPmr");
+  }
+  return t(locale, "onboarding.city", { examples: cityExamples(country, locale) });
+}
+
+export function cityUnknownText(locale: Locale, country: CountryCode) {
+  if (country === "PMR") {
+    return t(locale, "onboarding.cityUnknownPmr");
+  }
+  return t(locale, "onboarding.cityUnknown", { examples: cityExamples(country, locale) });
+}
+
 export function resolveCity(text: string, country: CountryCode, locale: Locale) {
-  const city = findCity(text, country);
+  const city = resolveCityInput(text, country);
   if (city) {
-    return { ok: true as const, city, label: cityLabel(city.slug, locale) };
+    return {
+      ok: true as const,
+      city,
+      label: locale === "ro" ? city.nameRo : city.nameRu,
+    };
   }
   return {
     ok: false as const,

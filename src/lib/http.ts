@@ -37,9 +37,12 @@ export async function politeGet(
   url: string,
   minIntervalMs: number,
   userAgent = BROWSER_UA,
+  options?: { force?: boolean },
 ): Promise<PoliteGetResult> {
   const state = stateFor(url);
-  const run = state.queue.then(() => doGet(url, state, minIntervalMs, userAgent));
+  const run = state.queue.then(() =>
+    doGet(url, state, minIntervalMs, userAgent, options?.force === true),
+  );
   state.queue = run.then(
     () => undefined,
     () => undefined,
@@ -52,12 +55,13 @@ async function doGet(
   state: HostState,
   minIntervalMs: number,
   userAgent: string,
+  force: boolean,
 ): Promise<PoliteGetResult> {
   const now = Date.now();
   if (now < state.backoffUntil) {
     return { ok: false, reason: "backoff" };
   }
-  if (now - state.lastAt < minIntervalMs) {
+  if (!force && now - state.lastAt < minIntervalMs) {
     if (state.body) {
       return { ok: true, body: state.body, fromCache: true };
     }

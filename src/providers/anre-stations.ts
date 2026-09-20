@@ -1,13 +1,36 @@
 import { API_UA, FETCH_LIMITS, SOURCES } from "../config/sources";
+import { namesMatch } from "../config/cities";
 import { politeGet } from "../lib/http";
 import type { OfficialPrice } from "../types/price";
 import type { FuelKind } from "../types";
+import type { City } from "../config/cities";
+import { GASOLINE_GRADES } from "../config/constants";
 
 interface AnreStation {
+  x?: number;
+  y?: number;
   station_status?: number;
   gasoline?: number | null;
   diesel?: number | null;
   gpl?: number | null;
+  station_name?: string | null;
+  company_name?: string | null;
+  nomenclator?: string | null;
+  fullstreet?: string | null;
+  addrnum?: string | null;
+  bua?: string | null;
+  lev1?: string | null;
+  lev2?: string | null;
+  sector?: string | null;
+}
+
+export interface StationQuote {
+  name: string;
+  address?: string;
+  lat?: number;
+  lng?: number;
+  prices: { fuel: FuelKind; amount: number }[];
+  currencyCode: "MDL" | "PRB";
 }
 
 function median(values: number[]): number | null {
@@ -40,21 +63,63 @@ function push(
   });
 }
 
-/** Официальный JSON ANRE e-Carburanți — без парсинга HTML. */
-export async function fetchAnreStations(): Promise<OfficialPrice[]> {
-  const result = await politeGet(SOURCES.anreApi, FETCH_LIMITS.anreApiMs, API_UA);
+/** Web Mercator (EPSG:3857) → WGS84 для Google Maps. */
+export function mercatorToWgs(x: number, y: number) {
+  const lon = (x / 20037508.34) * 180;
+  let lat = (y / 20037508.34) * 180;
+  lat =
+    (180 / Math.PI) *
+    (2 * Math.atan(Math.exp((lat * Math.PI) / 180)) - Math.PI / 2);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return null;
+  }
+  return { lat, lng: lon };
+}
+
+function stationInCity(station: AnreStation, city: City) {
+  const fields = [station.lev1, station.lev2, station.bua, station.sector].filter(
+    (value): value is string => Boolean(value),
+  );
+  const needles = [city.slug, city.nameRu, city.nameRo, ...city.aliases];
+  return fields.some((field) => needles.some((needle) => namesMatch(field, needle)));
+}
+
+function stationPrices(station: AnreStation, watch: FuelKind[]) {
+  const prices: { fuel: FuelKind; amount: number }[] = [];
+  if (station.gasoline) {
+    for (const fuel of watch) {
+      if (GASOLINE_GRADES.includes(fuel)) {
+        prices.push({ fuel, amount: station.gasoline });
+      }
+    }
+  }
+  if (watch.includes("DIESEL") && station.diesel) {
+    prices.push({ fuel: "DIESEL", amount: station.diesel });
+  }
+  if (watch.includes("LPG") && station.gpl) {
+    prices.push({ fuel: "LPG", amount: station.gpl });
+  }
+  return prices;
+}
+
+async function loadStations(force: boolean) {
+  const result = await politeGet(SOURCES.anreApi, FETCH_LIMITS.anreApiMs, API_UA, {
+    force,
+  });
   if (!result.ok) {
     return [];
   }
-
-  let stations: AnreStation[];
   try {
-    stations = JSON.parse(result.body) as AnreStation[];
+    return JSON.parse(result.body) as AnreStation[];
   } catch {
     console.warn("[anre] invalid JSON");
     return [];
   }
+}
 
+/** Официальный JSON ANRE e-Carburanți — без парсинга HTML. */
+export async function fetchAnreStations(force = false): Promise<OfficialPrice[]> {
+  const stations = await loadStations(force);
   const gasoline: number[] = [];
   const diesel: number[] = [];
   const gpl: number[] = [];
@@ -80,3 +145,49 @@ export async function fetchAnreStations(): Promise<OfficialPrice[]> {
   push(prices, "LPG", median(gpl));
   return prices;
 }
+
+export async function fetchAnreCityStations(
+  city: City,
+  watch: FuelKind[],
+  limit = 8,
+): Promise<StationQuote[]> {
+  const stations = await loadStations(true);
+  const quotes: StationQuote[] = [];
+
+  for (const station of stations) {
+    if (station.station_status !== 1 || !stationInCity(station, city)) {
+      continue;
+    }
+    const prices = stationPrices(station, watch);
+    if (!prices.length) {
+      continue;
+    }
+    const geo =
+      station.x != null && station.y != null
+        ? mercatorToWgs(station.x, station.y)
+        : null;
+    const name = [station.station_name, station.nomenclator]
+      .filter((part) => part && part.trim())
+      .join(" · ") || station.company_name || "PECO";
+    const address = [station.fullstreet, station.addrnum]
+      .filter((part) => part && String(part).trim())
+      .join(", ");
+    quotes.push({
+      name,
+      address: address || undefined,
+      lat: geo?.lat,
+      lng: geo?.lng,
+      prices,
+      currencyCode: "MDL",
+    });
+  }
+
+  const sortFuel = watch[0] ?? "AI95";
+  quotes.sort((a, b) => {
+    const pa = a.prices.find((item) => item.fuel === sortFuel)?.amount ?? 999;
+    const pb = b.prices.find((item) => item.fuel === sortFuel)?.amount ?? 999;
+    return pa - pb;
+  });
+  return quotes.slice(0, limit);
+}
+

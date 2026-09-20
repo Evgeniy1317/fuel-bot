@@ -4,7 +4,8 @@ import {
   FUEL_LABELS,
   GASOLINE_GRADES,
 } from "../config/constants";
-import type { FuelKind, Locale } from "../types";
+import type { CountryCode, FuelKind, Locale } from "../types";
+import { citiesIn } from "../config/cities";
 import { t } from "./i18n";
 
 function navRow(kb: Keyboard, locale: Locale, opts: { skip?: boolean; back?: boolean }) {
@@ -31,8 +32,27 @@ export function countryKeyboard(locale: Locale) {
   );
 }
 
+export function pmrCityKeyboard(locale: Locale) {
+  const kb = new Keyboard();
+  const cities = citiesIn("PMR");
+  cities.forEach((entry, index) => {
+    kb.text(locale === "ro" ? entry.nameRo : entry.nameRu);
+    if (index % 2 === 1) {
+      kb.row();
+    }
+  });
+  if (cities.length % 2 === 1) {
+    kb.row();
+  }
+  return navRow(kb, locale, { back: true });
+}
+
 export function backKeyboard(locale: Locale) {
   return new Keyboard().text(t(locale, "onboarding.back")).resized();
+}
+
+export function cityKeyboard(locale: Locale, country: CountryCode) {
+  return country === "PMR" ? pmrCityKeyboard(locale) : backKeyboard(locale);
 }
 
 export function skipBackKeyboard(locale: Locale) {

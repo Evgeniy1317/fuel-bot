@@ -9,11 +9,12 @@ const SHERIFF_CLASS: Record<string, FuelKind> = {
   "f-dt": "DIESEL",
 };
 
-export async function fetchSheriffPrices(): Promise<OfficialPrice[]> {
+export async function fetchSheriffPrices(force = false): Promise<OfficialPrice[]> {
   const result = await politeGet(
     SOURCES.sheriffPrices,
     FETCH_LIMITS.sheriffMs,
     BROWSER_UA,
+    { force },
   );
   if (!result.ok) {
     return [];

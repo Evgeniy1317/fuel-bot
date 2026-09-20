@@ -10,9 +10,11 @@ export const ro: Messages = {
     country: "🗺 De unde te alimentezi?",
     countryPmr: "Transnistria",
     countryMd: "Moldova",
-    city: "📍 În ce oraș te alimentezi? Scrie în rusă sau română.\nDe exemplu: {examples}",
+    city: "📍 În ce oraș te alimentezi? Scrie numele exact — în rusă sau română, unul din orașele Moldovei.\nDe exemplu: {examples}",
+    cityPmr: "📍 Alege orașul:",
     cityUnknown:
-      "🤔 Nu am recunoscut orașul. Scrie din nou — în rusă sau română.\nDe exemplu: {examples}",
+      "🤔 Acesta nu e un oraș din listă. Scrie un nume corect — în rusă sau română, dintre orașele Moldovei.\nDe exemplu: {examples}",
+    cityUnknownPmr: "🤔 Alege orașul de pe butoanele de mai jos.",
     car: "🚗 Marca și modelul mașinii într-un mesaj.\nDe exemplu: Volkswagen Golf",
     propulsion: "⛽ Cu ce alimentezi mașina?",
     gasoline: "⛽ Benzină",
@@ -36,6 +38,14 @@ export const ro: Messages = {
     trialDeclined:
       "👌 Profilul e salvat. Când ești gata — apasă «⭐ Abonament» sau /subscribe.",
     done: "🎉 Gata. Cele 3 zile de probă sunt pornite: îți scriu când merită să alimentezi azi.",
+  },
+  prices: {
+    today: "⛽ Prețurile de azi · {city}",
+    stations: "📍 Stații în oraș (întâi cele mai ieftine):",
+    stationsCap: "Am arătat până la 8 stații, ca mesajul să nu fie prea lung.",
+    noStations: "📍 Pentru acest oraș încă n-am găsit stații cu prețuri.",
+    empty: "⛽ Acum n-am putut lua prețurile. Revin mai târziu în alerte.",
+    map: "🗺 Hartă",
   },
   menu: {
     title: "🏠 Meniu principal",

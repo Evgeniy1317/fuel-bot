@@ -1,13 +1,13 @@
 import type { Bot } from "grammy";
 import { ALL_FUELS, FUEL_LABELS, toggleFuel } from "../../config/constants";
-import { cityExamples, cityLabel } from "../../config/cities";
+import { cityLabel } from "../../config/cities";
 import { userRepo } from "../../repositories/user.repo";
 import { vehicleRepo } from "../../repositories/vehicle.repo";
 import type { FuelKind, Locale } from "../../types";
 import type { BotContext, SettingsEditField } from "../context";
 import { t } from "../i18n";
 import {
-  backKeyboard,
+  cityKeyboard,
   countryKeyboard,
   fillGradeKeyboard,
   languageKeyboard,
@@ -18,6 +18,8 @@ import {
   watchFuelsInline,
 } from "../keyboards";
 import {
+  cityPromptText,
+  cityUnknownText,
   fillGradeForPropulsion,
   isBack,
   isSkip,
@@ -110,9 +112,12 @@ async function startEdit(ctx: BotContext, field: SettingsEditField) {
   }
   if (field === "city") {
     const user = await userRepo.findByTelegramId(String(ctx.from?.id));
-    const examples = user?.country ? cityExamples(user.country, locale) : "";
-    await ctx.reply(t(locale, "onboarding.city", { examples }), {
-      reply_markup: backKeyboard(locale),
+    if (!user?.country) {
+      await startEdit(ctx, "country");
+      return;
+    }
+    await ctx.reply(cityPromptText(locale, user.country), {
+      reply_markup: cityKeyboard(locale, user.country),
     });
     return;
   }
@@ -286,8 +291,8 @@ export function registerSettings(bot: Bot<BotContext>) {
       }
       await userRepo.patch(telegramId, { country, city: null });
       ctx.session.editing = "city";
-      await ctx.reply(t(locale, "onboarding.city", { examples: cityExamples(country, locale) }), {
-        reply_markup: backKeyboard(locale),
+      await ctx.reply(cityPromptText(locale, country), {
+        reply_markup: cityKeyboard(locale, country),
       });
       return;
     }
@@ -300,8 +305,8 @@ export function registerSettings(bot: Bot<BotContext>) {
       }
       const resolved = resolveCity(text, user.country, locale);
       if (!resolved.ok) {
-        await ctx.reply(t(locale, "onboarding.cityUnknown", { examples: resolved.examples }), {
-          reply_markup: backKeyboard(locale),
+        await ctx.reply(cityUnknownText(locale, user.country), {
+          reply_markup: cityKeyboard(locale, user.country),
         });
         return;
       }

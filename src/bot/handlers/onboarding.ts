@@ -7,8 +7,9 @@ import { userRepo } from "../../repositories/user.repo";
 import type { FuelKind, OnboardingDraft } from "../../types";
 import type { BotContext } from "../context";
 import { t } from "../i18n";
-import { backKeyboard, menuKeyboard, skipBackKeyboard, watchFuelsInline } from "../keyboards";
+import { cityKeyboard, menuKeyboard, skipBackKeyboard, watchFuelsInline } from "../keyboards";
 import {
+  cityUnknownText,
   defaultWatchFuels,
   fillGradeForPropulsion,
   isBack,
@@ -23,6 +24,7 @@ import {
   resolveCity,
 } from "../onboarding-flow";
 import { showSavingsRating } from "./menu";
+import { sendTodayPrices } from "../../services/today-prices";
 
 function parseNumber(text: string | undefined) {
   if (!text) {
@@ -61,6 +63,7 @@ export async function applyTrialChoice(ctx: BotContext, choice: "yes" | "no") {
     await ctx.reply(t(locale, "onboarding.trialDeclined"), {
       reply_markup: menuKeyboard(locale),
     });
+    await sendTodayPrices(ctx);
     return;
   }
 
@@ -80,6 +83,7 @@ export async function applyTrialChoice(ctx: BotContext, choice: "yes" | "no") {
       if (ctx.session.onboarding) {
         ctx.session.onboarding.step = "done";
       }
+      await sendTodayPrices(ctx);
       return;
     }
     await subscriptionService.startTrial(user.id);
@@ -92,6 +96,7 @@ export async function applyTrialChoice(ctx: BotContext, choice: "yes" | "no") {
   await ctx.reply(t(locale, "onboarding.done"), {
     reply_markup: menuKeyboard(locale),
   });
+  await sendTodayPrices(ctx);
 }
 
 export function registerOnboarding(bot: Bot<BotContext>) {
@@ -148,8 +153,8 @@ export function registerOnboarding(bot: Bot<BotContext>) {
       }
       const resolved = resolveCity(text, draft.country, locale);
       if (!resolved.ok) {
-        await ctx.reply(t(locale, "onboarding.cityUnknown", { examples: resolved.examples }), {
-          reply_markup: backKeyboard(locale),
+        await ctx.reply(cityUnknownText(locale, draft.country), {
+          reply_markup: cityKeyboard(locale, draft.country),
         });
         return;
       }
