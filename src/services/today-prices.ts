@@ -1,5 +1,5 @@
 import { InlineKeyboard } from "grammy";
-import { FUEL_LABELS } from "../config/constants";
+import { FUEL_LABELS, fuelsForCountry } from "../config/constants";
 import { CITIES, cityLabel, type City } from "../config/cities";
 import { mdMapsUrl, pmrMapsUrl, pmrStationsIn } from "../config/pmr-stations";
 import { money } from "../config/currency";
@@ -43,14 +43,48 @@ function pickAmount(prices: OfficialPrice[], fuel: FuelKind) {
   return undefined;
 }
 
-function formatSpot(prices: OfficialPrice[], watch: FuelKind[], locale: Locale) {
+function trendMark(current: number, previous?: number) {
+  if (previous == null) {
+    return "";
+  }
+  if (current > previous + 0.004) {
+    return "🔺 ";
+  }
+  if (current < previous - 0.004) {
+    return "🟢 ";
+  }
+  return "";
+}
+
+async function previousMap(country: CountryCode, prices: OfficialPrice[]) {
+  const map = new Map<FuelKind, number>();
+  await Promise.all(
+    prices.map(async (price) => {
+      const previous = await priceRepo.previousAmount(country, price.fuel, price.amount);
+      if (previous != null) {
+        map.set(price.fuel, previous);
+      }
+    }),
+  );
+  return map;
+}
+
+function formatSpot(
+  prices: OfficialPrice[],
+  fuels: FuelKind[],
+  locale: Locale,
+  previous: Map<FuelKind, number>,
+) {
   const lines: string[] = [];
-  for (const fuel of watch) {
+  for (const fuel of fuels) {
     const hit = pickAmount(prices, fuel);
     if (!hit) {
       continue;
     }
-    lines.push(`${esc(FUEL_LABELS[fuel][locale])}\n<b>${esc(money(hit.amount, hit.currencyCode, locale))}</b>`);
+    const mark = trendMark(hit.amount, previous.get(hit.fuel) ?? previous.get(fuel));
+    lines.push(
+      `${mark}<b>${esc(FUEL_LABELS[fuel][locale])}</b>\n<code>${esc(money(hit.amount, hit.currencyCode, locale))}</code>`,
+    );
   }
   return lines;
 }
@@ -79,15 +113,19 @@ function isToday(date: Date) {
   return date.toLocaleDateString("en-CA", { timeZone: zone }) === today;
 }
 
-function formatStations(quotes: StationQuote[], locale: Locale) {
+function formatStations(
+  quotes: StationQuote[],
+  locale: Locale,
+  previous: Map<FuelKind, number>,
+) {
   return quotes.map((quote, index) => {
     const fuels = quote.prices
-      .map(
-        (item) =>
-          `${esc(FUEL_LABELS[item.fuel][locale])}  —  <b>${esc(money(item.amount, quote.currencyCode, locale))}</b>`,
-      )
+      .map((item) => {
+        const mark = trendMark(item.amount, previous.get(item.fuel));
+        return `${mark}${esc(FUEL_LABELS[item.fuel][locale])}  <code>${esc(money(item.amount, quote.currencyCode, locale))}</code>`;
+      })
       .join("\n");
-    const address = quote.address ? `\n${esc(quote.address)}` : "";
+    const address = quote.address ? `\n<i>${esc(quote.address)}</i>` : "";
     return `<b>${index + 1}. ${esc(quote.name)}</b>${address}\n${fuels}`;
   });
 }
@@ -119,7 +157,82 @@ function pushChunks(target: string[], header: string, parts: string[]) {
   }
 }
 
+async function loadLivePrices(
+  country: CountryCode,
+  city: City | null,
+  watch: FuelKind[],
+  locale: Locale,
+) {
+  let spot: OfficialPrice[] = [];
+  let quotes: StationQuote[] = [];
+
+  try {
+    if (country === "MD") {
+      spot = await fetchAnreStations(true);
+      if (city) {
+        quotes = await fetchAnreCityStations(city, watch, 10);
+      }
+    } else {
+      spot = await fetchSheriffPrices(true);
+      const network = watchPrices(spot, watch);
+      if (city && network.length) {
+        quotes = pmrStationsIn(city.slug).map((station) => ({
+          name: locale === "ro" ? station.nameRo : station.nameRu,
+          address: locale === "ro" ? station.addressRo : station.addressRu,
+          mapQuery: station.mapQuery,
+          prices: network,
+          currencyCode: "PRB" as const,
+        }));
+      }
+    }
+  } catch (error) {
+    console.error("[today-prices]", error);
+  }
+
+  if (!spot.length) {
+    const fallback: OfficialPrice[] = [];
+    for (const fuel of watch) {
+      const latest = await priceRepo.latest(country, fuel);
+      if (latest && isToday(latest.observedAt)) {
+        fallback.push({
+          country,
+          fuel,
+          amount: Number(latest.amount),
+          currencyCode: latest.currencyCode as "MDL" | "PRB",
+          observedAt: latest.observedAt,
+          kind: "SPOT",
+        });
+      }
+    }
+    spot = fallback;
+    if (country === "PMR" && city && !quotes.length && fallback.length) {
+      quotes = pmrStationsIn(city.slug).map((station) => ({
+        name: locale === "ro" ? station.nameRo : station.nameRu,
+        address: locale === "ro" ? station.addressRo : station.addressRu,
+        mapQuery: station.mapQuery,
+        prices: watchPrices(fallback, watch),
+        currencyCode: "PRB" as const,
+      }));
+    }
+  }
+
+  return { spot, quotes: quotes.filter((quote) => quote.prices.length) };
+}
+
+const replyOpts = {
+  parse_mode: "HTML" as const,
+  link_preview_options: { is_disabled: true },
+};
+
 export async function sendTodayPrices(ctx: BotContext) {
+  await sendPriceBundle(ctx, "watch");
+}
+
+export async function sendAllPrices(ctx: BotContext) {
+  await sendPriceBundle(ctx, "all");
+}
+
+async function sendPriceBundle(ctx: BotContext, mode: "watch" | "all") {
   try {
     const locale = ctx.session.locale;
     const telegramId = ctx.from?.id.toString();
@@ -127,81 +240,59 @@ export async function sendTodayPrices(ctx: BotContext) {
       return;
     }
     const user = await userRepo.findByTelegramId(telegramId);
-    if (!user?.country || !user.watchFuels.length) {
+    if (!user?.country) {
+      await ctx.reply(t(locale, "prices.needCity"), {
+        reply_markup: menuKeyboard(locale),
+      });
       return;
     }
 
     const city = user.city ? cityFromSlug(user.city, user.country) : null;
-    const watch = user.watchFuels;
-    let spot: OfficialPrice[] = [];
-    let quotes: StationQuote[] = [];
-
-    try {
-      if (user.country === "MD") {
-        spot = await fetchAnreStations(true);
-        if (city) {
-          quotes = await fetchAnreCityStations(city, watch, 10);
-        }
-      } else {
-        spot = await fetchSheriffPrices(true);
-        const network = watchPrices(spot, watch);
-        if (city && network.length) {
-          quotes = pmrStationsIn(city.slug).map((station) => ({
-            name: locale === "ro" ? station.nameRo : station.nameRu,
-            address: locale === "ro" ? station.addressRo : station.addressRu,
-            mapQuery: station.mapQuery,
-            prices: network,
-            currencyCode: "PRB" as const,
-          }));
-        }
-      }
-    } catch (error) {
-      console.error("[today-prices]", error);
+    if (mode === "watch" && !city) {
+      await ctx.reply(t(locale, "prices.needCity"), {
+        reply_markup: menuKeyboard(locale),
+      });
+      return;
     }
 
-    if (!spot.length && user.country) {
-      const fallback: OfficialPrice[] = [];
-      for (const fuel of watch) {
-        const latest = await priceRepo.latest(user.country, fuel);
-        if (latest && isToday(latest.observedAt)) {
-          fallback.push({
-            country: user.country,
-            fuel,
-            amount: Number(latest.amount),
-            currencyCode: latest.currencyCode as "MDL" | "PRB",
-            observedAt: latest.observedAt,
-            kind: "SPOT",
-          });
-        }
-      }
-      spot = fallback;
-      if (user.country === "PMR" && city && !quotes.length && fallback.length) {
-        quotes = pmrStationsIn(city.slug).map((station) => ({
-          name: locale === "ro" ? station.nameRo : station.nameRu,
-          address: locale === "ro" ? station.addressRo : station.addressRu,
-          mapQuery: station.mapQuery,
-          prices: watchPrices(fallback, watch),
-          currencyCode: "PRB" as const,
-        }));
-      }
-    }
+    const fuels =
+      mode === "all"
+        ? fuelsForCountry(user.country)
+        : user.watchFuels.length
+          ? user.watchFuels
+          : fuelsForCountry(user.country);
 
-    quotes = quotes.filter((quote) => quote.prices.length);
-
-    const cityName = city ? (locale === "ro" ? city.nameRo : city.nameRu) || cityLabel(city.slug, locale) : "";
-    const header = `<b>${esc(t(locale, "prices.today", { city: cityName || "—" }))}</b>`;
-    const spotLines = formatSpot(spot, watch, locale);
-    const priceText = spotLines.length ? `${header}\n\n${spotLines.join("\n\n")}` : esc(t(locale, "prices.empty"));
+    const { spot, quotes } = await loadLivePrices(
+      user.country,
+      mode === "watch" ? city : null,
+      fuels,
+      locale,
+    );
+    const previous = await previousMap(user.country, spot);
+    const cityName = city
+      ? (locale === "ro" ? city.nameRo : city.nameRu) || cityLabel(city.slug, locale)
+      : "";
+    const headerText =
+      mode === "all"
+        ? t(locale, "prices.all")
+        : t(locale, "prices.today", { city: cityName });
+    const spotLines = formatSpot(spot, fuels, locale, previous);
+    const priceText = spotLines.length
+      ? `<b>${esc(headerText)}</b>\n\n${spotLines.join("\n\n")}`
+      : esc(t(locale, "prices.empty"));
     const markup = menuKeyboard(locale);
 
     await ctx.reply(priceText, {
-      parse_mode: "HTML",
+      ...replyOpts,
       reply_markup: markup,
-      link_preview_options: { is_disabled: true },
     });
 
+    if (mode !== "watch") {
+      return;
+    }
+
     if (quotes.length) {
-      const stationParts = formatStations(quotes, locale);
+      const stationParts = formatStations(quotes, locale, previous);
       const chunks: string[] = [];
       pushChunks(chunks, `<b>${esc(t(locale, "prices.stations"))}</b>`, stationParts);
       if (user.country === "MD" && quotes.length >= 10) {
@@ -209,9 +300,8 @@ export async function sendTodayPrices(ctx: BotContext) {
       }
       for (const [index, chunk] of chunks.entries()) {
         await ctx.reply(chunk, {
-          parse_mode: "HTML",
+          ...replyOpts,
           reply_markup: index === chunks.length - 1 ? mapsKeyboard(quotes, user.country, locale) : undefined,
-          link_preview_options: { is_disabled: true },
         });
       }
     } else if (city) {
@@ -220,4 +310,55 @@ export async function sendTodayPrices(ctx: BotContext) {
   } catch (error) {
     console.error("[today-prices]", error);
   }
+}
+
+export async function liveFuelKinds(country: CountryCode) {
+  const allowed = fuelsForCountry(country);
+  let spot: OfficialPrice[] = [];
+  try {
+    spot = country === "MD" ? await fetchAnreStations(true) : await fetchSheriffPrices(true);
+  } catch (error) {
+    console.error("[today-prices] fuels", error);
+  }
+  if (!spot.length) {
+    for (const fuel of allowed) {
+      const latest = await priceRepo.latest(country, fuel);
+      if (latest && isToday(latest.observedAt)) {
+        spot.push({
+          country,
+          fuel,
+          amount: Number(latest.amount),
+          currencyCode: latest.currencyCode as "MDL" | "PRB",
+          observedAt: latest.observedAt,
+          kind: "SPOT",
+        });
+      }
+    }
+  }
+  return allowed.filter((fuel) => Boolean(pickAmount(spot, fuel)));
+}
+
+export async function currentFuelPrice(country: CountryCode, fuel: FuelKind) {
+  let spot: OfficialPrice[] = [];
+  try {
+    spot = country === "MD" ? await fetchAnreStations(true) : await fetchSheriffPrices(true);
+  } catch (error) {
+    console.error("[today-prices] calc", error);
+  }
+  const live = pickAmount(spot, fuel);
+  if (live) {
+    return live;
+  }
+  const latest = await priceRepo.latest(country, fuel);
+  if (latest && isToday(latest.observedAt)) {
+    return {
+      country,
+      fuel,
+      amount: Number(latest.amount),
+      currencyCode: latest.currencyCode as "MDL" | "PRB",
+      observedAt: latest.observedAt,
+      kind: "SPOT" as const,
+    };
+  }
+  return undefined;
 }

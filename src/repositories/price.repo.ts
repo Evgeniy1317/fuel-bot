@@ -10,6 +10,22 @@ export const priceRepo = {
     });
   },
 
+  async previousAmount(country: CountryCode, fuel: FuelKind, current: number) {
+    const rows = await prisma.priceHistory.findMany({
+      where: { region: { country }, fuel },
+      orderBy: { observedAt: "desc" },
+      take: 12,
+      select: { amount: true },
+    });
+    for (const row of rows) {
+      const value = Number(row.amount);
+      if (Math.abs(value - current) > 0.004) {
+        return value;
+      }
+    }
+    return undefined;
+  },
+
   async insert(input: {
     country: CountryCode;
     fuel: FuelKind;

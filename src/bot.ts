@@ -6,6 +6,7 @@ import { hydrateUser } from "./bot/middlewares/hydrate-user";
 import { registerStart } from "./bot/handlers/start";
 import { registerOnboarding } from "./bot/handlers/onboarding";
 import { registerFillIntent } from "./bot/handlers/fill-intent";
+import { registerCalculator } from "./bot/handlers/calculator";
 import { registerMenu } from "./bot/handlers/menu";
 import { registerSubscription } from "./bot/handlers/subscription";
 import { registerLeaderboard } from "./bot/handlers/leaderboard";
@@ -25,6 +26,7 @@ export function createBot() {
   registerFillIntent(bot);
   registerSettings(bot);
   registerMenu(bot);
+  registerCalculator(bot);
   registerSubscription(bot);
   registerLeaderboard(bot);
   registerAdmin(bot);

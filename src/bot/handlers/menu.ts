@@ -1,11 +1,21 @@
 import type { Bot } from "grammy";
 import { money } from "../../config/currency";
 import { leaderboardService } from "../../services/leaderboard";
+import { sendAllPrices, sendTodayPrices } from "../../services/today-prices";
 import { savingsRepo } from "../../repositories/savings.repo";
 import { userRepo } from "../../repositories/user.repo";
 import type { BotContext } from "../context";
 import { t } from "../i18n";
 import { menuKeyboard, needProfileKeyboard } from "../keyboards";
+import { startCalculator } from "./calculator";
+
+function wizardOpen(ctx: BotContext) {
+  return Boolean(ctx.session.onboarding && ctx.session.onboarding.step !== "done");
+}
+
+function clearCalc(ctx: BotContext) {
+  ctx.session.calc = undefined;
+}
 
 function profileReady(
   user: NonNullable<Awaited<ReturnType<typeof userRepo.findByTelegramId>>>,
@@ -62,6 +72,10 @@ export async function showSavingsRating(ctx: BotContext) {
   });
 }
 
+function labels(...keys: string[]) {
+  return keys.flatMap((key) => [t("ru", key), t("ro", key)]);
+}
+
 export function registerMenu(bot: Bot<BotContext>) {
   bot.command("menu", async (ctx) => {
     await ctx.reply(t(ctx.session.locale, "menu.title"), {
@@ -69,6 +83,35 @@ export function registerMenu(bot: Bot<BotContext>) {
     });
   });
 
+  bot.hears(labels("menu.allPrices"), async (ctx) => {
+    if (wizardOpen(ctx)) {
+      return;
+    }
+    clearCalc(ctx);
+    await sendAllPrices(ctx);
+  });
+
+  bot.hears(labels("menu.myCity"), async (ctx) => {
+    if (wizardOpen(ctx)) {
+      return;
+    }
+    clearCalc(ctx);
+    await sendTodayPrices(ctx);
+  });
+
+  bot.hears(labels("menu.calc"), async (ctx) => {
+    if (wizardOpen(ctx)) {
+      return;
+    }
+    await startCalculator(ctx);
+  });
+
   bot.command("top", showSavingsRating);
-  bot.hears(/Экономия|Economie|рейтинг|Clasament/i, showSavingsRating);
+  bot.hears(/Экономия|Economie/i, async (ctx) => {
+    if (wizardOpen(ctx)) {
+      return;
+    }
+    clearCalc(ctx);
+    await showSavingsRating(ctx);
+  });
 }

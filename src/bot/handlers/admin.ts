@@ -27,7 +27,7 @@ export function registerAdmin(bot: Bot<BotContext>) {
   bot.command("admin", adminOnly, async (ctx) => {
     const snapshot = await statsRepo.snapshot();
     await ctx.reply(
-      `${formatStats(snapshot)}\n\nКоманды: /stats — эти цифры. Уведомления о триале и оплате приходят сюда сами.`,
+      `${formatStats(snapshot)}\n\nКоманды: /stats. Эти же цифры. Уведомления о триале и оплате приходят сюда сами.`,
     );
   });
 }

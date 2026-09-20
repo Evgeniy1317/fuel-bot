@@ -162,9 +162,26 @@ export function needProfileKeyboard(locale: Locale) {
 
 export function menuKeyboard(locale: Locale) {
   return new Keyboard()
+    .text(t(locale, "menu.allPrices"))
+    .text(t(locale, "menu.myCity"))
+    .row()
+    .text(t(locale, "menu.calc"))
+    .row()
     .text(t(locale, "menu.savings"))
     .row()
     .text(t(locale, "menu.subscribe"))
     .text(t(locale, "menu.settings"))
     .resized();
+}
+
+export function calcFuelKeyboard(
+  locale: Locale,
+  country?: CountryCode | null,
+  fuels?: FuelKind[],
+) {
+  const kb = new InlineKeyboard();
+  for (const fuel of fuels ?? fuelsForCountry(country)) {
+    kb.text(FUEL_LABELS[fuel][locale], `calc:${fuel}`).row();
+  }
+  return kb;
 }

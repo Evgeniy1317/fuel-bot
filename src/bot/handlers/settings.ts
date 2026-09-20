@@ -49,6 +49,7 @@ function dash(locale: Locale, value?: string | null) {
 }
 
 export async function showSettings(ctx: BotContext) {
+  ctx.session.calc = undefined;
   const locale = ctx.session.locale;
   const user = await userRepo.findByTelegramId(String(ctx.from?.id));
   const country = user?.country;

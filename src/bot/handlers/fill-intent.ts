@@ -19,6 +19,10 @@ export function registerFillIntent(bot: Bot<BotContext>) {
       await next();
       return;
     }
+    if (ctx.session.calc?.step === "amount") {
+      await next();
+      return;
+    }
 
     const text = ctx.message.text.trim();
     const locale = ctx.session.locale;

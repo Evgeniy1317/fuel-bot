@@ -35,11 +35,15 @@ export function registerSubscription(bot: Bot<BotContext>) {
     if (!user || payment.currency !== "XTR") {
       return;
     }
-    await subscriptionService.activateFromStars(
+    const paid = await subscriptionService.activateFromStars(
       user.id,
       payment.telegram_payment_charge_id,
     );
-    await ctx.reply(t(ctx.session.locale, "subscription.active", { date: "—" }));
+    await ctx.reply(
+      t(ctx.session.locale, "subscription.active", {
+        date: formatSubDate(paid.currentPeriodEndsAt, ctx.session.locale),
+      }),
+    );
     await adminNotify.send(
       ctx.api,
       `Оплата Stars: ${payment.total_amount} XTR\n${formatUser(user)}`,
@@ -47,7 +51,18 @@ export function registerSubscription(bot: Bot<BotContext>) {
   });
 }
 
+function formatSubDate(date: Date | null | undefined, locale: "ru" | "ro") {
+  if (!date) {
+    return t(locale, "settings.dash");
+  }
+  return date.toLocaleDateString(locale === "ro" ? "ro-RO" : "ru-RU", {
+    day: "numeric",
+    month: "long",
+  });
+}
+
 async function sendSubscribe(ctx: BotContext) {
+  ctx.session.calc = undefined;
   const locale = ctx.session.locale;
   const user = await userRepo.findByTelegramId(String(ctx.from?.id));
   const sub = user?.subscription;
@@ -66,6 +81,15 @@ async function sendSubscribe(ctx: BotContext) {
 
   if (sub.status === "TRIAL" && subscriptionService.hasAccess(sub)) {
     await ctx.reply(t(locale, "subscription.trial"));
+    return;
+  }
+
+  if (sub.status === "ACTIVE" && subscriptionService.hasAccess(sub)) {
+    await ctx.reply(
+      t(locale, "subscription.active", {
+        date: formatSubDate(sub.currentPeriodEndsAt, locale),
+      }),
+    );
     return;
   }
 

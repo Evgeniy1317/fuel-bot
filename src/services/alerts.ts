@@ -27,26 +27,37 @@ function alreadySent(key: string) {
 }
 
 function renderAlert(locale: Locale, payload: AlertPayload, regionName: string) {
-  const fuel = FUEL_LABELS[payload.fuel][locale];
-  const amount = money(payload.amount, payload.currencyCode, locale);
-  const key = payload.advisory
-    ? "alert.hikeNeighbor"
-    : payload.kind === "PREDICTED_HIKE"
-      ? "alert.hikeToday"
-      : payload.kind === "PRICE_DOWN"
-        ? "alert.down"
-        : "alert.up";
+  const fuel = esc(FUEL_LABELS[payload.fuel][locale]);
+  const amount = esc(money(payload.amount, payload.currencyCode, locale));
+  const previous =
+    payload.previousAmount != null
+      ? esc(money(payload.previousAmount, payload.currencyCode, locale))
+      : "";
+  const region = esc(regionName);
+  const boldAmount = `<b>${amount}</b>`;
 
+  if (payload.kind === "PRICE_UP" || payload.kind === "PRICE_DOWN") {
+    const change = previous
+      ? t(locale, "alert.wasNow", { previous, amount: boldAmount })
+      : boldAmount;
+    return t(locale, payload.kind === "PRICE_DOWN" ? "alert.down" : "alert.up", {
+      fuel: `<b>${fuel}</b>`,
+      amount: change,
+      region,
+    });
+  }
+
+  const key = payload.advisory ? "alert.hikeNeighbor" : "alert.hikeToday";
   const body = t(locale, key, {
     fuel,
-    region: regionName,
-    amount,
+    region,
+    amount: boldAmount,
   });
+  return `${body}\n\n${esc(t(locale, "alert.fillAsk"))}`;
+}
 
-  if (payload.kind === "PREDICTED_HIKE") {
-    return `${body}\n\n${t(locale, "alert.fillAsk")}`;
-  }
-  return body;
+function esc(value: string) {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 export const alertService = {
@@ -122,9 +133,12 @@ export const alertService = {
       await input.bot.api.sendMessage(
         user.telegramId,
         renderAlert(locale, payload, regionName),
-        askFill && fillPrice > 0
-          ? { reply_markup: fillTodayKeyboard(locale) }
-          : undefined,
+        {
+          parse_mode: "HTML",
+          ...(askFill && fillPrice > 0
+            ? { reply_markup: fillTodayKeyboard(locale) }
+            : {}),
+        },
       );
 
       if (askFill && fillPrice > 0) {
