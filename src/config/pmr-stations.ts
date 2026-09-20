@@ -51,6 +51,8 @@ export const PMR_STATIONS: PmrStation[] = [
   station("slobozia", "Sheriff АЗС-12", "Sheriff AZS-12", "п. Незавертайловка, ул. Жукова, 1а", "Nezavertailovca, str. Jukov, 1a"),
   station("slobozia", "Sheriff АЗС-16", "Sheriff AZS-16", "пгт. Первомайск, ул. Садовая, 1в", "Pervomaisc, str. Sadovaia, 1v"),
   station("slobozia", "Sheriff АЗС Глиное", "Sheriff AZS Hlinaia", "с. Глиное, ул. Котовского, 2", "Hlinaia, str. Kotovski, 2"),
+  station("camenca", "Sheriff АЗС", "Sheriff AZS", "г. Каменка, район Завод", "Camenca, cartierul Zavod"),
+  station("dnestrovsc", "Sheriff АЗС", "Sheriff AZS", "при въезде в г. Днестровск", "la intrarea în Dnestrovsc"),
 ];
 
 export function pmrStationsIn(citySlug: string): PmrStation[] {

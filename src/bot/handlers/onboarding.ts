@@ -7,7 +7,7 @@ import { userRepo } from "../../repositories/user.repo";
 import type { FuelKind, OnboardingDraft } from "../../types";
 import type { BotContext } from "../context";
 import { t } from "../i18n";
-import { cityKeyboard, menuKeyboard, skipBackKeyboard, watchFuelsInline } from "../keyboards";
+import { cityKeyboard, hideReplyKeyboard, menuKeyboard, skipBackKeyboard, watchFuelsInline } from "../keyboards";
 import {
   cityUnknownText,
   fillGradeForPropulsion,
@@ -167,6 +167,9 @@ export function registerOnboarding(bot: Bot<BotContext>) {
         return;
       }
       draft.city = resolved.city.slug;
+      await ctx.reply(t(locale, "onboarding.cityPicked", { city: resolved.label }), {
+        reply_markup: hideReplyKeyboard(),
+      });
       draft.step = "watch_fuels";
       await promptOnboarding(ctx, draft);
       return;

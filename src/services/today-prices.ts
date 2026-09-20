@@ -1,3 +1,4 @@
+import { InlineKeyboard } from "grammy";
 import { FUEL_LABELS } from "../config/constants";
 import { CITIES, cityLabel, type City } from "../config/cities";
 import { mdMapsUrl, pmrMapsUrl, pmrStationsIn } from "../config/pmr-stations";
@@ -14,6 +15,10 @@ import type { BotContext } from "../bot/context";
 import { menuKeyboard } from "../bot/keyboards";
 
 const TELEGRAM_SAFE = 3500;
+
+function esc(value: string) {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
 
 function cityFromSlug(slug: string, country: CountryCode): City {
   const known = CITIES.find((entry) => entry.slug === slug);
@@ -45,7 +50,7 @@ function formatSpot(prices: OfficialPrice[], watch: FuelKind[], locale: Locale) 
     if (!hit) {
       continue;
     }
-    lines.push(`• ${FUEL_LABELS[fuel][locale]}: ${money(hit.amount, hit.currencyCode, locale)}`);
+    lines.push(`${esc(FUEL_LABELS[fuel][locale])}\n<b>${esc(money(hit.amount, hit.currencyCode, locale))}</b>`);
   }
   return lines;
 }
@@ -74,15 +79,28 @@ function isToday(date: Date) {
   return date.toLocaleDateString("en-CA", { timeZone: zone }) === today;
 }
 
-function formatStations(quotes: StationQuote[], locale: Locale, country: CountryCode) {
+function formatStations(quotes: StationQuote[], locale: Locale) {
   return quotes.map((quote, index) => {
     const fuels = quote.prices
-      .map((item) => `${FUEL_LABELS[item.fuel][locale]} ${money(item.amount, quote.currencyCode, locale)}`)
-      .join(" · ");
-    const address = quote.address ? `\n${quote.address}` : "";
-    const map = `\n${t(locale, "prices.map")}: ${quoteMapUrl(quote, country)}`;
-    return `${index + 1}. ${quote.name}${address}\n${fuels}${map}`;
+      .map(
+        (item) =>
+          `${esc(FUEL_LABELS[item.fuel][locale])}  —  <b>${esc(money(item.amount, quote.currencyCode, locale))}</b>`,
+      )
+      .join("\n");
+    const address = quote.address ? `\n${esc(quote.address)}` : "";
+    return `<b>${index + 1}. ${esc(quote.name)}</b>${address}\n${fuels}`;
   });
+}
+
+function mapsKeyboard(quotes: StationQuote[], country: CountryCode, locale: Locale) {
+  const kb = new InlineKeyboard();
+  quotes.forEach((quote, index) => {
+    kb.url(`${t(locale, "prices.map")} ${index + 1}`, quoteMapUrl(quote, country));
+    if (index % 2 === 1) {
+      kb.row();
+    }
+  });
+  return kb;
 }
 
 function pushChunks(target: string[], header: string, parts: string[]) {
@@ -171,24 +189,33 @@ export async function sendTodayPrices(ctx: BotContext) {
     quotes = quotes.filter((quote) => quote.prices.length);
 
     const cityName = city ? (locale === "ro" ? city.nameRo : city.nameRu) || cityLabel(city.slug, locale) : "";
-    const header = t(locale, "prices.today", { city: cityName || "—" });
+    const header = `<b>${esc(t(locale, "prices.today", { city: cityName || "—" }))}</b>`;
     const spotLines = formatSpot(spot, watch, locale);
-    const chunks: string[] = [
-      spotLines.length ? `${header}\n\n${spotLines.join("\n")}` : t(locale, "prices.empty"),
-    ];
+    const priceText = spotLines.length ? `${header}\n\n${spotLines.join("\n\n")}` : esc(t(locale, "prices.empty"));
+    const markup = menuKeyboard(locale);
+
+    await ctx.reply(priceText, {
+      parse_mode: "HTML",
+      reply_markup: markup,
+      link_preview_options: { is_disabled: true },
+    });
 
     if (quotes.length) {
-      pushChunks(chunks, t(locale, "prices.stations"), formatStations(quotes, locale, user.country));
+      const stationParts = formatStations(quotes, locale);
+      const chunks: string[] = [];
+      pushChunks(chunks, `<b>${esc(t(locale, "prices.stations"))}</b>`, stationParts);
       if (user.country === "MD" && quotes.length >= 10) {
-        chunks.push(t(locale, "prices.stationsCap"));
+        chunks.push(esc(t(locale, "prices.stationsCap")));
+      }
+      for (const [index, chunk] of chunks.entries()) {
+        await ctx.reply(chunk, {
+          parse_mode: "HTML",
+          reply_markup: index === chunks.length - 1 ? mapsKeyboard(quotes, user.country, locale) : undefined,
+          link_preview_options: { is_disabled: true },
+        });
       }
     } else if (city) {
-      chunks.push(t(locale, "prices.noStations"));
-    }
-
-    const markup = menuKeyboard(locale);
-    for (const chunk of chunks) {
-      await ctx.reply(chunk, { reply_markup: markup });
+      await ctx.reply(t(locale, "prices.noStations"), { reply_markup: markup });
     }
   } catch (error) {
     console.error("[today-prices]", error);

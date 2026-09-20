@@ -48,6 +48,10 @@ export function pmrCityKeyboard(locale: Locale) {
   return navRow(kb, locale, { back: true });
 }
 
+export function hideReplyKeyboard() {
+  return { remove_keyboard: true as const };
+}
+
 export function backKeyboard(locale: Locale) {
   return new Keyboard().text(t(locale, "onboarding.back")).resized();
 }
@@ -97,8 +101,9 @@ export function watchFuelsInline(
 ) {
   const kb = new InlineKeyboard();
   for (const fuel of fuelsForCountry(country)) {
-    const mark = selected.includes(fuel) ? "✅" : "⬜️";
-    kb.text(`${mark} ${FUEL_LABELS[fuel][locale]}`, `${prefix}:${fuel}`).row();
+    const label = FUEL_LABELS[fuel][locale];
+    const text = selected.includes(fuel) ? `✓ ${label}` : label;
+    kb.text(text, `${prefix}:${fuel}`).row();
   }
   kb.text(t(locale, "onboarding.watchDone"), `${prefix}:done`).row();
   kb.text(t(locale, "onboarding.back"), `${prefix}:back`);

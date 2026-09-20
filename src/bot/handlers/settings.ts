@@ -5,6 +5,7 @@ import { userRepo } from "../../repositories/user.repo";
 import { vehicleRepo } from "../../repositories/vehicle.repo";
 import type { FuelKind, Locale } from "../../types";
 import type { BotContext, SettingsEditField } from "../context";
+import { sendTodayPrices } from "../../services/today-prices";
 import { t } from "../i18n";
 import {
   cityKeyboard,
@@ -317,10 +318,11 @@ export function registerSettings(bot: Bot<BotContext>) {
         return;
       }
       await userRepo.patch(telegramId, { city: resolved.city.slug });
+      ctx.session.editing = undefined;
       await ctx.reply(t(locale, "settings.saved"), {
         reply_markup: menuKeyboard(locale),
       });
-      await showSettings(ctx);
+      await sendTodayPrices(ctx);
       return;
     }
 

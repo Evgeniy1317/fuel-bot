@@ -15,6 +15,7 @@ export const ro: Messages = {
     cityUnknown:
       "🤔 Acesta nu e un oraș din listă. Scrie un nume corect — în rusă sau română, dintre orașele Moldovei.\nDe exemplu: {examples}",
     cityUnknownPmr: "🤔 Alege orașul de pe butoanele de mai jos.",
+    cityPicked: "📍 {city}",
     car: "🚗 Marca și modelul mașinii într-un mesaj.\nDe exemplu: Volkswagen Golf",
     propulsion: "⛽ Cu ce alimentezi mașina?",
     gasoline: "⛽ Benzină",
@@ -25,10 +26,10 @@ export const ro: Messages = {
     consumption: "📊 Consum mediu, l/100 km. De exemplu: 8.5",
     dailyKm: "🛣 Câți kilometri faci pe zi, aproximativ? De exemplu: 40",
     watchFuels:
-      "🔔 Pentru ce combustibili vrei alerte? Bifează — poți alege mai multe. Când termini — «Gata».",
+      "🔔 Pentru ce combustibili vrei alerte? Apasă varianta — apare bifa. Poți alege mai multe. Apoi — «Gata».",
     watchSelected: "✅ Alerte: {list}",
-    watchNone: "⚪️ Deocamdată nimic selectat.",
-    watchNeedOne: "🔔 Bifează cel puțin un combustibil.",
+    watchNone: "Deocamdată nimic selectat.",
+    watchNeedOne: "🔔 Alege cel puțin un combustibil.",
     watchDone: "✅ Gata",
     skip: "⏭ Să nu răspund",
     back: "⬅️ Înapoi",
@@ -43,7 +44,7 @@ export const ro: Messages = {
   },
   prices: {
     today: "⛽ Prețurile de azi · {city}",
-    stations: "📍 Stații în oraș (întâi cele mai ieftine):",
+    stations: "📍 Stații în oraș",
     stationsCap: "Am arătat stațiile principale din oraș, ca mesajul să nu fie prea lung.",
     noStations: "📍 Pentru acest oraș încă n-am găsit stații cu prețuri de azi.",
     empty: "⛽ Acum n-am putut lua prețurile. Revin mai târziu în alerte.",
