@@ -55,9 +55,9 @@ export const ro: Messages = {
   calc: {
     ask: "🧮 Ce calculăm? Alege combustibilul.",
     amount:
-      "🧮 {fuel}\nAcum {price} pe litru.\n\nScrie un număr. De exemplu:\n20  sunt litri\n500  sunt bani",
-    result:
-      "🧮 {fuel}\n{price} pe litru\n\n⛽ {liters} l  =  {cost}\n💰 pe {money}  =  {got} l",
+      "🧮 {fuel}\nAcum {price} pe litru.\n\nScrie un număr.\n20  cât costă 20 de litri\n500  câți litri ies pe 500",
+    resultLiters: "🧮 {fuel}\n{price} pe litru\n\n⛽ {liters} l  =  {cost}",
+    resultMoney: "🧮 {fuel}\n{price} pe litru\n\n💰 pe {money}  =  {got} l",
     noPrice: "⛽ Acum nu e preț pentru acest combustibil. Încearcă altul sau revino mai târziu.",
   },
   menu: {

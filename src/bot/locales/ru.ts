@@ -53,9 +53,9 @@ export const ru = {
   calc: {
     ask: "🧮 Что посчитать? Выбери топливо.",
     amount:
-      "🧮 {fuel}\nСейчас {price} за литр.\n\nНапиши число. Например:\n20  это литры\n500  это деньги",
-    result:
-      "🧮 {fuel}\n{price} за литр\n\n⛽ {liters} л  =  {cost}\n💰 на {money}  =  {got} л",
+      "🧮 {fuel}\nСейчас {price} за литр.\n\nНапиши число.\n20  сколько стоят 20 литров\n500  сколько литров на 500",
+    resultLiters: "🧮 {fuel}\n{price} за литр\n\n⛽ {liters} л  =  {cost}",
+    resultMoney: "🧮 {fuel}\n{price} за литр\n\n💰 на {money}  =  {got} л",
     noPrice: "⛽ Сейчас нет цены на это топливо. Попробуй другое или зайди позже.",
   },
   menu: {

@@ -26,6 +26,12 @@ function roundLiters(value: number) {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
 }
 
+const MAX_TANK_LITERS = 80;
+
+function isMoneyAmount(value: number) {
+  return value > MAX_TANK_LITERS;
+}
+
 export async function startCalculator(ctx: BotContext) {
   const locale = ctx.session.locale;
   ctx.session.editing = undefined;
@@ -115,23 +121,27 @@ export function registerCalculator(bot: Bot<BotContext>) {
       return;
     }
 
-    const cost = calc.price * amount;
-    const liters = amount / calc.price;
+    const asMoney = isMoneyAmount(amount);
     const fuels = calc.country ? await liveFuelKinds(calc.country) : undefined;
+    const fuel = `<b>${FUEL_LABELS[calc.fuel][locale]}</b>`;
+    const price = `<code>${money(calc.price, calc.currencyCode, locale)}</code>`;
+    const text = asMoney
+      ? t(locale, "calc.resultMoney", {
+          fuel,
+          price,
+          money: `<b>${money(amount, calc.currencyCode, locale)}</b>`,
+          got: `<b>${roundLiters(amount / calc.price)}</b>`,
+        })
+      : t(locale, "calc.resultLiters", {
+          fuel,
+          price,
+          liters: `<b>${amount}</b>`,
+          cost: `<b>${money(calc.price * amount, calc.currencyCode, locale)}</b>`,
+        });
 
-    await ctx.reply(
-      t(locale, "calc.result", {
-        fuel: `<b>${FUEL_LABELS[calc.fuel][locale]}</b>`,
-        price: `<code>${money(calc.price, calc.currencyCode, locale)}</code>`,
-        liters: `<b>${amount}</b>`,
-        cost: `<b>${money(cost, calc.currencyCode, locale)}</b>`,
-        money: `<b>${money(amount, calc.currencyCode, locale)}</b>`,
-        got: `<b>${roundLiters(liters)}</b>`,
-      }),
-      {
-        parse_mode: "HTML",
-        reply_markup: calcFuelKeyboard(locale, calc.country, fuels),
-      },
-    );
+    await ctx.reply(text, {
+      parse_mode: "HTML",
+      reply_markup: calcFuelKeyboard(locale, calc.country, fuels),
+    });
   });
 }
