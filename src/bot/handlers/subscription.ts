@@ -4,11 +4,26 @@ import { userRepo } from "../../repositories/user.repo";
 import type { BotContext } from "../context";
 import { t } from "../i18n";
 import { adminNotify, formatUser } from "../../services/admin-notify";
-import { trialKeyboard } from "../keyboards";
+import { trialChoiceKeyboard } from "../keyboards";
+import { applyTrialChoice } from "./onboarding";
+import { matchTrial } from "../onboarding-flow";
 
 export function registerSubscription(bot: Bot<BotContext>) {
   bot.command("subscribe", sendSubscribe);
   bot.hears(/Подписка|Abonament/, sendSubscribe);
+
+  bot.on("message:text", async (ctx, next) => {
+    if (ctx.session.onboarding && ctx.session.onboarding.step !== "done") {
+      await next();
+      return;
+    }
+    const choice = matchTrial(ctx.message.text);
+    if (!choice) {
+      await next();
+      return;
+    }
+    await applyTrialChoice(ctx, choice);
+  });
 
   bot.on("pre_checkout_query", async (ctx) => {
     await ctx.answerPreCheckoutQuery(true);
@@ -39,7 +54,7 @@ async function sendSubscribe(ctx: BotContext) {
 
   if (!sub) {
     await ctx.reply(t(locale, "onboarding.trialAsk"), {
-      reply_markup: trialKeyboard(locale),
+      reply_markup: trialChoiceKeyboard(locale),
     });
     return;
   }

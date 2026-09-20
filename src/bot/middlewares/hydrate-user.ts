@@ -13,7 +13,10 @@ export async function hydrateUser(ctx: BotContext, next: NextFunction) {
   // TODO: кэш на короткий TTL, чтобы не ходить в БД на каждый апдейт
   const user = await userRepo.findByTelegramId(telegramId);
   if (user) {
-    ctx.session.locale = user.locale;
+    const wizard = ctx.session.onboarding;
+    if (!wizard || wizard.step === "done") {
+      ctx.session.locale = user.locale;
+    }
   }
 
   await next();

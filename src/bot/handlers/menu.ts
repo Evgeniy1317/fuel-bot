@@ -8,7 +8,12 @@ import { t } from "../i18n";
 import { menuKeyboard } from "../keyboards";
 
 function vehicleFromUser(user: NonNullable<Awaited<ReturnType<typeof userRepo.findByTelegramId>>>) {
-  if (!user.vehicle || !user.country || user.dailyKm === null) {
+  if (
+    !user.vehicle ||
+    !user.country ||
+    user.dailyKm === null ||
+    user.vehicle.litersPer100km === null
+  ) {
     return null;
   }
   const vehicle: VehicleInput = {

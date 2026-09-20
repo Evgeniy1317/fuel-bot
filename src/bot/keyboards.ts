@@ -1,49 +1,95 @@
-import { InlineKeyboard, Keyboard } from "grammy";
-import { ALL_FUELS, FUEL_LABELS } from "../config/constants";
-import type { FuelKind, Locale } from "../types";
+import { Keyboard } from "grammy";
+import {
+  FUEL_LABELS,
+  GASOLINE_GRADES,
+  WATCH_GROUP_LABELS,
+  WATCH_GROUPS,
+} from "../config/constants";
+import type { FuelWatchGroup, Locale } from "../types";
 import { t } from "./i18n";
 
+function navRow(kb: Keyboard, locale: Locale, opts: { skip?: boolean; back?: boolean }) {
+  if (opts.skip) {
+    kb.row().text(t(locale, "onboarding.skip"));
+  }
+  if (opts.back) {
+    kb.row().text(t(locale, "onboarding.back"));
+  }
+  return kb.resized();
+}
+
 export function languageKeyboard() {
-  return new InlineKeyboard()
-    .text("Русский", "lang:ru")
-    .text("Română", "lang:ro");
+  return new Keyboard().text("Русский").text("Română").resized();
 }
 
 export function countryKeyboard(locale: Locale) {
-  return new InlineKeyboard()
-    .text(t(locale, "onboarding.countryPmr"), "country:PMR")
-    .text(t(locale, "onboarding.countryMd"), "country:MD");
+  return navRow(
+    new Keyboard()
+      .text(t(locale, "onboarding.countryPmr"))
+      .text(t(locale, "onboarding.countryMd")),
+    locale,
+    { back: true },
+  );
+}
+
+export function backKeyboard(locale: Locale) {
+  return new Keyboard().text(t(locale, "onboarding.back")).resized();
+}
+
+export function skipBackKeyboard(locale: Locale) {
+  return new Keyboard()
+    .text(t(locale, "onboarding.skip"))
+    .row()
+    .text(t(locale, "onboarding.back"))
+    .resized();
 }
 
 export function propulsionKeyboard(locale: Locale) {
-  return new InlineKeyboard()
-    .text(t(locale, "onboarding.gasoline"), "prop:GASOLINE")
-    .text(t(locale, "onboarding.lpg"), "prop:LPG");
+  return navRow(
+    new Keyboard()
+      .text(t(locale, "onboarding.gasoline"))
+      .text(t(locale, "onboarding.diesel"))
+      .text(t(locale, "onboarding.lpg")),
+    locale,
+    { back: true },
+  );
 }
 
 export function fillGradeKeyboard(locale: Locale) {
-  const kb = new InlineKeyboard();
-  kb.text(FUEL_LABELS.AI92[locale], "grade:AI92")
-    .text(FUEL_LABELS.AI95[locale], "grade:AI95")
-    .text(FUEL_LABELS.AI98[locale], "grade:AI98");
-  return kb;
+  const kb = new Keyboard();
+  for (const grade of GASOLINE_GRADES) {
+    kb.text(FUEL_LABELS[grade][locale]);
+  }
+  return navRow(kb, locale, { back: true });
 }
 
-export function watchFuelsKeyboard(locale: Locale, selected: FuelKind[]) {
-  const kb = new InlineKeyboard();
-  for (const fuel of ALL_FUELS) {
-    const mark = selected.includes(fuel) ? "✓ " : "";
-    kb.text(`${mark}${FUEL_LABELS[fuel][locale]}`, `watch:${fuel}`).row();
+export function watchGroupsKeyboard(locale: Locale, selected: FuelWatchGroup[]) {
+  const kb = new Keyboard();
+  for (const group of WATCH_GROUPS) {
+    const mark = selected.includes(group) ? "✓ " : "";
+    kb.text(`${mark}${WATCH_GROUP_LABELS[group][locale]}`).row();
   }
-  kb.text(t(locale, "onboarding.watchDone"), "watch:done");
-  return kb;
+  kb.text(t(locale, "onboarding.watchDone"));
+  return navRow(kb, locale, { back: true });
 }
 
 export function trialKeyboard(locale: Locale) {
-  return new InlineKeyboard()
-    .text(t(locale, "onboarding.trialYes"), "trial:yes")
+  return navRow(
+    new Keyboard()
+      .text(t(locale, "onboarding.trialYes"))
+      .row()
+      .text(t(locale, "onboarding.trialNo")),
+    locale,
+    { back: true },
+  );
+}
+
+export function trialChoiceKeyboard(locale: Locale) {
+  return new Keyboard()
+    .text(t(locale, "onboarding.trialYes"))
     .row()
-    .text(t(locale, "onboarding.trialNo"), "trial:no");
+    .text(t(locale, "onboarding.trialNo"))
+    .resized();
 }
 
 export function menuKeyboard(locale: Locale) {

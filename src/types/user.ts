@@ -1,8 +1,15 @@
-import type { CountryCode, FuelKind, Locale, VehiclePropulsion } from "./fuel";
+import type {
+  CountryCode,
+  FuelKind,
+  FuelWatchGroup,
+  Locale,
+  VehiclePropulsion,
+} from "./fuel";
 
 export type OnboardingStep =
   | "language"
   | "country"
+  | "city"
   | "car"
   | "propulsion"
   | "fill_grade"
@@ -16,13 +23,14 @@ export interface OnboardingDraft {
   step: OnboardingStep;
   locale?: Locale;
   country?: CountryCode;
+  city?: string;
   brand?: string;
   model?: string;
   propulsion?: VehiclePropulsion;
   fillGrade?: FuelKind;
   litersPer100km?: number;
   dailyKm?: number;
-  watchFuels?: FuelKind[];
+  watchGroups?: FuelWatchGroup[];
 }
 
 export interface UserProfile {
@@ -35,9 +43,9 @@ export interface UserProfile {
 }
 
 export interface VehicleInput {
-  brand: string;
-  model: string;
-  litersPer100km: number;
+  brand: string | null;
+  model: string | null;
+  litersPer100km: number | null;
   propulsion: VehiclePropulsion;
   fillGrade: FuelKind;
 }

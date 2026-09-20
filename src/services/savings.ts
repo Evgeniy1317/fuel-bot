@@ -1,5 +1,5 @@
 import { priceRepo } from "../repositories/price.repo";
-import type { CountryCode, FuelKind, VehicleInput } from "../types";
+import type { CountryCode, VehicleInput } from "../types";
 
 export interface SavingsEstimate {
   litersPerDay: number;
@@ -22,12 +22,16 @@ export const savingsService = {
     dailyKm: number;
     vehicle: VehicleInput;
   }): Promise<SavingsEstimate | null> {
+    const consumption = input.vehicle.litersPer100km;
+    if (consumption === null) {
+      return null;
+    }
     const latest = await priceRepo.latest(input.country, input.vehicle.fillGrade);
     if (!latest) {
       return null;
     }
 
-    const liters = this.litersPerDay(input.dailyKm, input.vehicle.litersPer100km);
+    const liters = this.litersPerDay(input.dailyKm, consumption);
     const price = Number(latest.amount);
     const costPerDay = liters * price;
 

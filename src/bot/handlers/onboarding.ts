@@ -1,20 +1,29 @@
 import type { Bot } from "grammy";
-import { GASOLINE_GRADES } from "../../config/constants";
+import { WATCH_GROUPS } from "../../config/constants";
 import { onboardingService } from "../../services/onboarding";
 import { subscriptionService } from "../../services/subscription";
 import { adminNotify, formatUser } from "../../services/admin-notify";
 import { userRepo } from "../../repositories/user.repo";
-import type { FuelKind, Locale, VehiclePropulsion } from "../../types";
+import type { FuelWatchGroup, OnboardingDraft } from "../../types";
 import type { BotContext } from "../context";
 import { t } from "../i18n";
+import { backKeyboard, menuKeyboard, skipBackKeyboard, watchGroupsKeyboard } from "../keyboards";
 import {
-  countryKeyboard,
-  fillGradeKeyboard,
-  menuKeyboard,
-  propulsionKeyboard,
-  trialKeyboard,
-  watchFuelsKeyboard,
-} from "../keyboards";
+  defaultWatchGroups,
+  fillGradeForPropulsion,
+  isBack,
+  isSkip,
+  matchCountry,
+  matchFillGrade,
+  matchLanguage,
+  matchPropulsion,
+  matchTrial,
+  matchWatchAction,
+  previousStep,
+  promptOnboarding,
+  resolveCity,
+  watchListText,
+} from "../onboarding-flow";
 
 function parseNumber(text: string | undefined) {
   if (!text) {
@@ -25,31 +34,72 @@ function parseNumber(text: string | undefined) {
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
-export function registerOnboarding(bot: Bot<BotContext>) {
-  bot.callbackQuery(/^lang:(ru|ro)$/, async (ctx, next) => {
-    if (ctx.session.onboarding?.step !== "language") {
-      await next();
+async function goBack(ctx: BotContext, draft: OnboardingDraft) {
+  draft.step = previousStep(draft);
+  await promptOnboarding(ctx, draft);
+}
+
+async function persistDraft(ctx: BotContext, draft: OnboardingDraft) {
+  const telegramId = ctx.from?.id.toString();
+  if (!telegramId) {
+    return;
+  }
+  await onboardingService.persist(
+    telegramId,
+    { username: ctx.from?.username, firstName: ctx.from?.first_name },
+    draft,
+  );
+}
+
+function orderedWatchGroups(selected: Set<FuelWatchGroup>): FuelWatchGroup[] {
+  return WATCH_GROUPS.filter((group) => selected.has(group));
+}
+
+export async function applyTrialChoice(ctx: BotContext, choice: "yes" | "no") {
+  const locale = ctx.session.locale;
+  const telegramId = ctx.from?.id.toString();
+
+  if (choice === "no") {
+    if (ctx.session.onboarding) {
+      ctx.session.onboarding.step = "done";
+    }
+    await ctx.reply(t(locale, "onboarding.trialDeclined"), {
+      reply_markup: menuKeyboard(locale),
+    });
+    return;
+  }
+
+  if (telegramId) {
+    const user = await userRepo.findByTelegramId(telegramId);
+    if (!user) {
+      await ctx.reply(t(locale, "errors.generic"));
       return;
     }
-    const locale = ctx.match[1] as Locale;
-    ctx.session.locale = locale;
-    ctx.session.onboarding = { step: "country", locale };
-    await ctx.answerCallbackQuery();
-    await ctx.reply(t(locale, "onboarding.country"), {
-      reply_markup: countryKeyboard(locale),
-    });
-  });
+    if (user.subscription) {
+      await ctx.reply(
+        subscriptionService.hasAccess(user.subscription)
+          ? t(locale, "subscription.trial")
+          : t(locale, "subscription.expired"),
+        { reply_markup: menuKeyboard(locale) },
+      );
+      if (ctx.session.onboarding) {
+        ctx.session.onboarding.step = "done";
+      }
+      return;
+    }
+    await subscriptionService.startTrial(user.id);
+    await adminNotify.send(ctx.api, `Триал 3 дня\n${formatUser(user)}`);
+  }
 
-  bot.callbackQuery(/^country:(PMR|MD)$/, async (ctx) => {
-    const locale = ctx.session.locale;
-    const draft = ctx.session.onboarding ?? { step: "country", locale };
-    draft.country = ctx.match[1] as "PMR" | "MD";
-    draft.step = "car";
-    ctx.session.onboarding = draft;
-    await ctx.answerCallbackQuery();
-    await ctx.reply(t(locale, "onboarding.car"));
+  if (ctx.session.onboarding) {
+    ctx.session.onboarding.step = "done";
+  }
+  await ctx.reply(t(locale, "onboarding.done"), {
+    reply_markup: menuKeyboard(locale),
   });
+}
 
+export function registerOnboarding(bot: Bot<BotContext>) {
   bot.on("message:text", async (ctx, next) => {
     const draft = ctx.session.onboarding;
     if (!draft || draft.step === "done") {
@@ -61,184 +111,188 @@ export function registerOnboarding(bot: Bot<BotContext>) {
       return;
     }
 
-    const locale = ctx.session.locale;
+    const text = ctx.message.text.trim();
+    const locale = draft.locale ?? ctx.session.locale;
+
+    if (isBack(text) && draft.step !== "language") {
+      await goBack(ctx, draft);
+      return;
+    }
+
+    if (draft.step === "language") {
+      const picked = matchLanguage(text);
+      if (!picked) {
+        await promptOnboarding(ctx, draft);
+        return;
+      }
+      draft.locale = picked;
+      ctx.session.locale = picked;
+      draft.step = "country";
+      await promptOnboarding(ctx, draft);
+      return;
+    }
+
+    if (draft.step === "country") {
+      const country = matchCountry(text);
+      if (!country) {
+        await promptOnboarding(ctx, draft);
+        return;
+      }
+      draft.country = country;
+      draft.city = undefined;
+      draft.step = "city";
+      await promptOnboarding(ctx, draft);
+      return;
+    }
+
+    if (draft.step === "city") {
+      if (!draft.country) {
+        draft.step = "country";
+        await promptOnboarding(ctx, draft);
+        return;
+      }
+      const resolved = resolveCity(text, draft.country, locale);
+      if (!resolved.ok) {
+        await ctx.reply(t(locale, "onboarding.cityUnknown", { examples: resolved.examples }), {
+          reply_markup: backKeyboard(locale),
+        });
+        return;
+      }
+      draft.city = resolved.city.slug;
+      draft.step = "car";
+      await promptOnboarding(ctx, draft);
+      return;
+    }
 
     if (draft.step === "car") {
-      const parts = ctx.message.text.trim().split(/\s+/);
-      draft.brand = parts[0] ?? "";
-      draft.model = parts.slice(1).join(" ") || parts[0] || "";
+      if (isSkip(text)) {
+        draft.brand = undefined;
+        draft.model = undefined;
+      } else {
+        const parts = text.split(/\s+/);
+        draft.brand = parts[0] ?? "";
+        draft.model = parts.slice(1).join(" ") || parts[0] || "";
+      }
       draft.step = "propulsion";
-      ctx.session.onboarding = draft;
-      await ctx.reply(t(locale, "onboarding.propulsion"), {
-        reply_markup: propulsionKeyboard(locale),
-      });
+      await promptOnboarding(ctx, draft);
+      return;
+    }
+
+    if (draft.step === "propulsion") {
+      const propulsion = matchPropulsion(text);
+      if (!propulsion) {
+        await promptOnboarding(ctx, draft);
+        return;
+      }
+      draft.propulsion = propulsion;
+      const autoGrade = fillGradeForPropulsion(propulsion);
+      if (autoGrade) {
+        draft.fillGrade = autoGrade;
+        draft.step = "consumption";
+      } else {
+        draft.fillGrade = undefined;
+        draft.step = "fill_grade";
+      }
+      draft.watchGroups = defaultWatchGroups(propulsion);
+      await promptOnboarding(ctx, draft);
+      return;
+    }
+
+    if (draft.step === "fill_grade") {
+      const grade = matchFillGrade(text);
+      if (!grade) {
+        await promptOnboarding(ctx, draft);
+        return;
+      }
+      draft.fillGrade = grade;
+      draft.step = "consumption";
+      await promptOnboarding(ctx, draft);
       return;
     }
 
     if (draft.step === "consumption") {
-      const value = parseNumber(ctx.message.text);
-      if (!value) {
-        await ctx.reply(t(locale, "errors.number"));
-        return;
+      if (isSkip(text)) {
+        draft.litersPer100km = undefined;
+      } else {
+        const value = parseNumber(text);
+        if (!value) {
+          await ctx.reply(t(locale, "errors.number"), {
+            reply_markup: skipBackKeyboard(locale),
+          });
+          return;
+        }
+        draft.litersPer100km = value;
       }
-      draft.litersPer100km = value;
       draft.step = "daily_km";
-      ctx.session.onboarding = draft;
-      await ctx.reply(t(locale, "onboarding.dailyKm"));
+      await promptOnboarding(ctx, draft);
       return;
     }
 
     if (draft.step === "daily_km") {
-      const value = parseNumber(ctx.message.text);
-      if (!value) {
-        await ctx.reply(t(locale, "errors.number"));
+      if (isSkip(text)) {
+        draft.dailyKm = undefined;
+      } else {
+        const value = parseNumber(text);
+        if (!value) {
+          await ctx.reply(t(locale, "errors.number"), {
+            reply_markup: skipBackKeyboard(locale),
+          });
+          return;
+        }
+        draft.dailyKm = value;
+      }
+      if (!draft.watchGroups?.length) {
+        draft.watchGroups = defaultWatchGroups(draft.propulsion);
+      }
+      draft.step = "watch_fuels";
+      await promptOnboarding(ctx, draft);
+      return;
+    }
+
+    if (draft.step === "watch_fuels") {
+      const action = matchWatchAction(text);
+      if (!action) {
+        await promptOnboarding(ctx, draft);
         return;
       }
-      draft.dailyKm = value;
-      draft.watchFuels = draft.fillGrade ? [draft.fillGrade] : [];
-      draft.step = "watch_fuels";
+      if (action === "done") {
+        if (!draft.watchGroups?.length) {
+          draft.watchGroups = defaultWatchGroups(draft.propulsion);
+        }
+        try {
+          await persistDraft(ctx, draft);
+        } catch {
+          await ctx.reply(t(locale, "errors.generic"));
+          return;
+        }
+        draft.step = "trial_consent";
+        await promptOnboarding(ctx, draft);
+        return;
+      }
+      const selected = new Set(draft.watchGroups ?? []);
+      if (selected.has(action)) {
+        selected.delete(action);
+      } else {
+        selected.add(action);
+      }
+      draft.watchGroups = orderedWatchGroups(selected);
       ctx.session.onboarding = draft;
-      await ctx.reply(
-        `${t(locale, "onboarding.watchFuels")}\n${t(locale, "onboarding.skipLong")}`,
-        { reply_markup: watchFuelsKeyboard(locale, draft.watchFuels) },
-      );
+      await ctx.reply(watchListText(locale, draft.watchGroups), {
+        reply_markup: watchGroupsKeyboard(locale, draft.watchGroups),
+      });
+      return;
+    }
+
+    if (draft.step === "trial_consent") {
+      const choice = matchTrial(text);
+      if (!choice) {
+        await promptOnboarding(ctx, draft);
+        return;
+      }
+      await applyTrialChoice(ctx, choice);
       return;
     }
 
     await next();
-  });
-
-  bot.callbackQuery(/^prop:(GASOLINE|LPG)$/, async (ctx) => {
-    const locale = ctx.session.locale;
-    const draft = ctx.session.onboarding;
-    if (!draft) {
-      return;
-    }
-
-    const propulsion = ctx.match[1] as VehiclePropulsion;
-    draft.propulsion = propulsion;
-    await ctx.answerCallbackQuery();
-
-    if (propulsion === "LPG") {
-      draft.fillGrade = "LPG";
-      draft.step = "consumption";
-      ctx.session.onboarding = draft;
-      await ctx.reply(t(locale, "onboarding.consumption"));
-      return;
-    }
-
-    draft.step = "fill_grade";
-    ctx.session.onboarding = draft;
-    await ctx.reply(t(locale, "onboarding.fillGrade"), {
-      reply_markup: fillGradeKeyboard(locale),
-    });
-  });
-
-  bot.callbackQuery(/^grade:(AI92|AI95|AI98)$/, async (ctx) => {
-    const locale = ctx.session.locale;
-    const draft = ctx.session.onboarding;
-    if (!draft) {
-      return;
-    }
-    const grade = ctx.match[1] as FuelKind;
-    if (!GASOLINE_GRADES.includes(grade)) {
-      return;
-    }
-    draft.fillGrade = grade;
-    draft.step = "consumption";
-    ctx.session.onboarding = draft;
-    await ctx.answerCallbackQuery();
-    await ctx.reply(t(locale, "onboarding.consumption"));
-  });
-
-  bot.callbackQuery(/^watch:(.+)$/, async (ctx) => {
-    const locale = ctx.session.locale;
-    const draft = ctx.session.onboarding;
-    if (!draft) {
-      return;
-    }
-
-    const token = ctx.match[1];
-    await ctx.answerCallbackQuery();
-
-    if (token === "done") {
-      if (!draft.watchFuels?.length && draft.fillGrade) {
-        draft.watchFuels = [draft.fillGrade];
-      }
-      draft.step = "trial_consent";
-      ctx.session.onboarding = draft;
-
-      const telegramId = ctx.from?.id.toString();
-      if (telegramId) {
-        await onboardingService.persist(
-          telegramId,
-          { username: ctx.from?.username, firstName: ctx.from?.first_name },
-          draft,
-        );
-      }
-
-      await ctx.reply(t(locale, "onboarding.trialAsk"), {
-        reply_markup: trialKeyboard(locale),
-      });
-      return;
-    }
-
-    const fuel = token as FuelKind;
-    const selected = new Set(draft.watchFuels ?? []);
-    if (selected.has(fuel)) {
-      selected.delete(fuel);
-    } else {
-      selected.add(fuel);
-    }
-    draft.watchFuels = [...selected];
-    ctx.session.onboarding = draft;
-    await ctx.editMessageReplyMarkup({
-      reply_markup: watchFuelsKeyboard(locale, draft.watchFuels),
-    });
-  });
-
-  bot.callbackQuery(/^trial:(yes|no)$/, async (ctx) => {
-    const locale = ctx.session.locale;
-    const telegramId = ctx.from?.id.toString();
-    await ctx.answerCallbackQuery();
-
-    if (ctx.match[1] === "no") {
-      if (ctx.session.onboarding) {
-        ctx.session.onboarding.step = "done";
-      }
-      await ctx.reply(t(locale, "onboarding.trialDeclined"), {
-        reply_markup: menuKeyboard(locale),
-      });
-      return;
-    }
-
-    if (telegramId) {
-      const user = await userRepo.findByTelegramId(telegramId);
-      if (!user) {
-        await ctx.reply(t(locale, "errors.generic"));
-        return;
-      }
-      if (user.subscription) {
-        await ctx.reply(
-          subscriptionService.hasAccess(user.subscription)
-            ? t(locale, "subscription.trial")
-            : t(locale, "subscription.expired"),
-          { reply_markup: menuKeyboard(locale) },
-        );
-        return;
-      }
-      await subscriptionService.startTrial(user.id);
-      await adminNotify.send(
-        ctx.api,
-        `Триал 3 дня\n${formatUser(user)}`,
-      );
-    }
-
-    if (ctx.session.onboarding) {
-      ctx.session.onboarding.step = "done";
-    }
-    await ctx.reply(t(locale, "onboarding.done"), {
-      reply_markup: menuKeyboard(locale),
-    });
   });
 }

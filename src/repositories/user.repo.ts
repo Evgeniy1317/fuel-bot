@@ -35,7 +35,8 @@ export const userRepo = {
     telegramId: string;
     locale: Locale;
     country: CountryCode;
-    dailyKm: number;
+    city: string;
+    dailyKm: number | null;
     watchFuels: FuelKind[];
   }) {
     return prisma.user.update({
@@ -43,6 +44,7 @@ export const userRepo = {
       data: {
         locale: input.locale,
         country: input.country,
+        city: input.city,
         dailyKm: input.dailyKm,
         watchFuels: input.watchFuels,
         onboardedAt: new Date(),

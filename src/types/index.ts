@@ -3,6 +3,7 @@ export type { OfficialPrice, PriceKind } from "./price";
 export type {
   CountryCode,
   FuelKind,
+  FuelWatchGroup,
   Locale,
   VehiclePropulsion,
 } from "./fuel";

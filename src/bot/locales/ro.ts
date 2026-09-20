@@ -10,17 +10,25 @@ export const ro: Messages = {
     country: "De unde te alimentezi?",
     countryPmr: "Transnistria",
     countryMd: "Moldova",
+    city: "În ce oraș te alimentezi? Scrie numele în rusă sau română.\nDe exemplu: {examples}",
+    cityUnknown:
+      "Nu am recunoscut orașul. Scrie din nou — în rusă sau română.\nDe exemplu: {examples}",
     car: "Marca și modelul mașinii într-un mesaj.\nDe exemplu: Volkswagen Golf",
     propulsion: "Cu ce alimentezi mașina?",
     gasoline: "Benzină",
+    diesel: "Motorină",
     lpg: "GPL",
     fillGrade: "Ce benzină pui de obicei?",
     consumption:
       "Consum mediu, l/100 km. Un număr, de exemplu: 8.5",
     dailyKm: "Câți kilometri faci aproximativ pe zi? De exemplu: 40",
     watchFuels:
-      "Pentru ce tipuri de combustibil vrei alerte? Poți alege mai multe. Când termini — apasă «Gata».",
+      "Pentru ce tipuri de combustibil vrei alerte? Poți alege mai multe: benzină, motorină, GPL. Apasă din nou ca să scoți bifa. Când termini — «Gata».",
+    watchSelected: "Alerte: {list}",
+    watchNone: "Deocamdată nimic selectat.",
     watchDone: "Gata",
+    skip: "Să nu răspund",
+    back: "← Înapoi",
     skipLong: "Urmează acordul pentru 3 zile gratuite.",
     trialAsk:
       "3 zile gratuit — alerte «merită să alimentezi azi» și calculul pentru mașina ta. Apoi abonament în Stars. Încercăm?",

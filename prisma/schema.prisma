@@ -30,6 +30,7 @@ enum FuelKind {
 /// Чем заправляется авто пользователя.
 enum VehiclePropulsion {
   GASOLINE
+  DIESEL
   LPG
 }
 
@@ -69,6 +70,8 @@ model User {
   firstName      String?
   locale         Locale    @default(ru)
   country        CountryCode?
+  /// Канонический slug города (тирасполь, chisinau, …), см. src/config/cities.ts
+  city           String?
   dailyKm        Decimal?  @db.Decimal(8, 1)
   /// Какие цены пользователь хочет видеть в алертах (мультивыбор).
   watchFuels     FuelKind[]
@@ -88,11 +91,11 @@ model Vehicle {
   id              String             @id @default(cuid())
   userId          String             @unique
   user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  brand           String
-  model           String
-  litersPer100km  Decimal            @db.Decimal(5, 2)
+  brand           String?
+  model           String?
+  litersPer100km  Decimal?           @db.Decimal(5, 2)
   propulsion      VehiclePropulsion
-  /// Какой бензин реально заливает (для GASOLINE). Для LPG можно оставить LPG.
+  /// Какой бензин реально заливает (для GASOLINE). Для DIESEL/LPG — тот же вид.
   fillGrade       FuelKind
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
