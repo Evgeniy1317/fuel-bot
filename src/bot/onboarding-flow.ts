@@ -34,11 +34,14 @@ import {
 function fold(value: string) {
   return value
     .replace(/^✓\s*/, "")
+    .replace(/^←\s*/, "")
     .trim()
     .toLowerCase()
     .replace(/ё/g, "е")
-    .normalize("NFD")
-    .replace(/\p{M}/gu, "");
+    .replace(/[ăâ]/g, "a")
+    .replace(/î/g, "i")
+    .replace(/[șş]/g, "s")
+    .replace(/[țţ]/g, "t");
 }
 
 function same(a: string, b: string) {
@@ -54,11 +57,10 @@ export function isSkip(text: string) {
 }
 
 export function matchLanguage(text: string): Locale | null {
-  const n = fold(text);
-  if (n === "русский" || n === "russian" || n === "ru") {
+  if (same(text, "Русский") || same(text, "Russian") || fold(text) === "ru") {
     return "ru";
   }
-  if (n === "romana" || n === "ro") {
+  if (same(text, "Română") || same(text, "Romana") || fold(text) === "ro") {
     return "ro";
   }
   return null;
