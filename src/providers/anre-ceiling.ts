@@ -56,7 +56,7 @@ export async function fetchAnreCeiling(): Promise<OfficialPrice[]> {
   if (dieselAmount !== null) {
     prices.push({
       country: "MD",
-      fuel: "DIESEL",
+        fuel: "DIESEL_EURO",
       amount: dieselAmount,
       currencyCode: "MDL",
       observedAt,

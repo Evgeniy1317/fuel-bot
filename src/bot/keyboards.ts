@@ -1,10 +1,11 @@
 import { InlineKeyboard, Keyboard } from "grammy";
 import {
-  ALL_FUELS,
   FUEL_LABELS,
-  GASOLINE_GRADES,
+  dieselGradesFor,
+  fuelsForCountry,
+  gasolineGradesFor,
 } from "../config/constants";
-import type { CountryCode, FuelKind, Locale } from "../types";
+import type { CountryCode, FuelKind, Locale, VehiclePropulsion } from "../types";
 import { citiesIn } from "../config/cities";
 import { t } from "./i18n";
 
@@ -74,17 +75,28 @@ export function propulsionKeyboard(locale: Locale) {
   );
 }
 
-export function fillGradeKeyboard(locale: Locale) {
+export function fillGradeKeyboard(
+  locale: Locale,
+  country?: CountryCode | null,
+  propulsion?: VehiclePropulsion,
+) {
   const kb = new Keyboard();
-  for (const grade of GASOLINE_GRADES) {
+  const grades =
+    propulsion === "DIESEL" ? dieselGradesFor(country) : gasolineGradesFor(country);
+  for (const grade of grades) {
     kb.text(FUEL_LABELS[grade][locale]);
   }
   return navRow(kb, locale, { back: true });
 }
 
-export function watchFuelsInline(locale: Locale, selected: FuelKind[], prefix = "watch") {
+export function watchFuelsInline(
+  locale: Locale,
+  selected: FuelKind[],
+  prefix = "watch",
+  country?: CountryCode | null,
+) {
   const kb = new InlineKeyboard();
-  for (const fuel of ALL_FUELS) {
+  for (const fuel of fuelsForCountry(country)) {
     const mark = selected.includes(fuel) ? "✅" : "⬜️";
     kb.text(`${mark} ${FUEL_LABELS[fuel][locale]}`, `${prefix}:${fuel}`).row();
   }

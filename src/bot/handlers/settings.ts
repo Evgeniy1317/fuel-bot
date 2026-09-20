@@ -1,5 +1,5 @@
 import type { Bot } from "grammy";
-import { ALL_FUELS, FUEL_LABELS, toggleFuel } from "../../config/constants";
+import { FUEL_LABELS, fuelsForCountry, toggleFuel } from "../../config/constants";
 import { cityLabel } from "../../config/cities";
 import { userRepo } from "../../repositories/user.repo";
 import { vehicleRepo } from "../../repositories/vehicle.repo";
@@ -128,9 +128,15 @@ async function startEdit(ctx: BotContext, field: SettingsEditField) {
     return;
   }
   if (field === "fill_grade") {
-    await ctx.reply(t(locale, "onboarding.fillGrade"), {
-      reply_markup: fillGradeKeyboard(locale),
-    });
+    const user = await userRepo.findByTelegramId(String(ctx.from?.id));
+    await ctx.reply(
+      user?.vehicle?.propulsion === "DIESEL"
+        ? t(locale, "onboarding.fillDiesel")
+        : t(locale, "onboarding.fillGrade"),
+      {
+        reply_markup: fillGradeKeyboard(locale, user?.country, user?.vehicle?.propulsion),
+      },
+    );
     return;
   }
   if (field === "consumption") {
@@ -148,7 +154,7 @@ async function startEdit(ctx: BotContext, field: SettingsEditField) {
   if (field === "watch_fuels") {
     const user = await userRepo.findByTelegramId(String(ctx.from?.id));
     await ctx.reply(t(locale, "onboarding.watchFuels"), {
-      reply_markup: watchFuelsInline(locale, user?.watchFuels ?? [], "setwatch"),
+      reply_markup: watchFuelsInline(locale, user?.watchFuels ?? [], "setwatch", user?.country),
     });
   }
 }
@@ -235,19 +241,19 @@ export function registerSettings(bot: Bot<BotContext>) {
       await showSettings(ctx);
       return;
     }
-    if (!ALL_FUELS.includes(token as FuelKind)) {
+    if (!fuelsForCountry(user.country).includes(token as FuelKind)) {
       await ctx.answerCallbackQuery();
       return;
     }
-    const next = toggleFuel(user.watchFuels, token as FuelKind);
+    const next = toggleFuel(user.watchFuels, token as FuelKind, user.country);
     if (!next.length) {
-      await ctx.answerCallbackQuery();
+      await ctx.answerCallbackQuery({ text: t(locale, "onboarding.watchNeedOne") });
       return;
     }
     await userRepo.patch(telegramId, { watchFuels: next });
     await ctx.answerCallbackQuery();
     await ctx.editMessageReplyMarkup({
-      reply_markup: watchFuelsInline(locale, next, "setwatch"),
+      reply_markup: watchFuelsInline(locale, next, "setwatch", user.country),
     });
   });
 
@@ -329,7 +335,7 @@ export function registerSettings(bot: Bot<BotContext>) {
         await showSettings(ctx);
         return;
       }
-      const autoGrade = fillGradeForPropulsion(propulsion);
+      const autoGrade = fillGradeForPropulsion(propulsion, user.country ?? undefined);
       if (autoGrade) {
         await vehicleRepo.upsertForUser(user.id, {
           brand: user?.vehicle?.brand ?? null,
@@ -358,9 +364,12 @@ export function registerSettings(bot: Bot<BotContext>) {
         propulsion,
         fillGrade: user?.vehicle?.fillGrade ?? "AI95",
       });
-      await ctx.reply(t(locale, "onboarding.fillGrade"), {
-        reply_markup: fillGradeKeyboard(locale),
-      });
+      await ctx.reply(
+        propulsion === "DIESEL" ? t(locale, "onboarding.fillDiesel") : t(locale, "onboarding.fillGrade"),
+        {
+          reply_markup: fillGradeKeyboard(locale, user.country, propulsion),
+        },
+      );
       return;
     }
 

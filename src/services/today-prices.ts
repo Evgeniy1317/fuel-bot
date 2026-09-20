@@ -1,6 +1,6 @@
-import { FUEL_LABELS, GASOLINE_GRADES } from "../config/constants";
+import { FUEL_LABELS } from "../config/constants";
 import { CITIES, cityLabel, type City } from "../config/cities";
-import { mapsUrl, pmrStationsIn } from "../config/pmr-stations";
+import { mdMapsUrl, pmrMapsUrl, pmrStationsIn } from "../config/pmr-stations";
 import { money } from "../config/currency";
 import { fetchAnreCityStations, fetchAnreStations } from "../providers/anre-stations";
 import type { StationQuote } from "../providers/anre-stations";
@@ -29,11 +29,11 @@ function pickAmount(prices: OfficialPrice[], fuel: FuelKind) {
   if (exact) {
     return exact;
   }
-  if (GASOLINE_GRADES.includes(fuel)) {
-    return (
-      prices.find((price) => price.fuel === "AI95") ??
-      prices.find((price) => GASOLINE_GRADES.includes(price.fuel))
-    );
+  if (fuel === "DIESEL_EURO") {
+    return prices.find((price) => price.fuel === "DIESEL");
+  }
+  if (fuel === "DIESEL") {
+    return prices.find((price) => price.fuel === "DIESEL_EURO");
   }
   return undefined;
 }
@@ -61,16 +61,26 @@ function watchPrices(spot: OfficialPrice[], watch: FuelKind[]) {
   return items;
 }
 
-function formatStations(quotes: StationQuote[], locale: Locale) {
+function quoteMapUrl(quote: StationQuote, country: CountryCode) {
+  const query =
+    quote.mapQuery ||
+    [quote.name, quote.address].filter(Boolean).join(", ");
+  return country === "PMR" ? pmrMapsUrl(query) : mdMapsUrl(query);
+}
+
+function isToday(date: Date) {
+  const zone = "Europe/Chisinau";
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: zone });
+  return date.toLocaleDateString("en-CA", { timeZone: zone }) === today;
+}
+
+function formatStations(quotes: StationQuote[], locale: Locale, country: CountryCode) {
   return quotes.map((quote, index) => {
     const fuels = quote.prices
       .map((item) => `${FUEL_LABELS[item.fuel][locale]} ${money(item.amount, quote.currencyCode, locale)}`)
       .join(" · ");
-    const map =
-      quote.lat != null && quote.lng != null
-        ? `\n${t(locale, "prices.map")}: ${mapsUrl(quote.lat, quote.lng)}`
-        : "";
     const address = quote.address ? `\n${quote.address}` : "";
+    const map = `\n${t(locale, "prices.map")}: ${quoteMapUrl(quote, country)}`;
     return `${index + 1}. ${quote.name}${address}\n${fuels}${map}`;
   });
 }
@@ -112,7 +122,7 @@ export async function sendTodayPrices(ctx: BotContext) {
       if (user.country === "MD") {
         spot = await fetchAnreStations(true);
         if (city) {
-          quotes = await fetchAnreCityStations(city, watch);
+          quotes = await fetchAnreCityStations(city, watch, 10);
         }
       } else {
         spot = await fetchSheriffPrices(true);
@@ -120,8 +130,8 @@ export async function sendTodayPrices(ctx: BotContext) {
         if (city && network.length) {
           quotes = pmrStationsIn(city.slug).map((station) => ({
             name: locale === "ro" ? station.nameRo : station.nameRu,
-            lat: station.lat,
-            lng: station.lng,
+            address: locale === "ro" ? station.addressRo : station.addressRu,
+            mapQuery: station.mapQuery,
             prices: network,
             currencyCode: "PRB" as const,
           }));
@@ -135,7 +145,7 @@ export async function sendTodayPrices(ctx: BotContext) {
       const fallback: OfficialPrice[] = [];
       for (const fuel of watch) {
         const latest = await priceRepo.latest(user.country, fuel);
-        if (latest) {
+        if (latest && isToday(latest.observedAt)) {
           fallback.push({
             country: user.country,
             fuel,
@@ -150,13 +160,15 @@ export async function sendTodayPrices(ctx: BotContext) {
       if (user.country === "PMR" && city && !quotes.length && fallback.length) {
         quotes = pmrStationsIn(city.slug).map((station) => ({
           name: locale === "ro" ? station.nameRo : station.nameRu,
-          lat: station.lat,
-          lng: station.lng,
+          address: locale === "ro" ? station.addressRo : station.addressRu,
+          mapQuery: station.mapQuery,
           prices: watchPrices(fallback, watch),
           currencyCode: "PRB" as const,
         }));
       }
     }
+
+    quotes = quotes.filter((quote) => quote.prices.length);
 
     const cityName = city ? (locale === "ro" ? city.nameRo : city.nameRu) || cityLabel(city.slug, locale) : "";
     const header = t(locale, "prices.today", { city: cityName || "—" });
@@ -166,8 +178,8 @@ export async function sendTodayPrices(ctx: BotContext) {
     ];
 
     if (quotes.length) {
-      pushChunks(chunks, t(locale, "prices.stations"), formatStations(quotes, locale));
-      if (quotes.length >= 8) {
+      pushChunks(chunks, t(locale, "prices.stations"), formatStations(quotes, locale, user.country));
+      if (user.country === "MD" && quotes.length >= 10) {
         chunks.push(t(locale, "prices.stationsCap"));
       }
     } else if (city) {

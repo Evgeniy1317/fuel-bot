@@ -8,8 +8,6 @@ export const onboardingService = {
       Boolean(draft.locale) &&
       Boolean(draft.country) &&
       Boolean(draft.city) &&
-      Boolean(draft.propulsion) &&
-      Boolean(draft.fillGrade) &&
       (draft.watchFuels?.length ?? 0) > 0
     );
   },
@@ -39,13 +37,15 @@ export const onboardingService = {
       watchFuels: draft.watchFuels!,
     });
 
-    await vehicleRepo.upsertForUser(user.id, {
-      brand: null,
-      model: null,
-      litersPer100km: draft.litersPer100km ?? null,
-      propulsion: draft.propulsion!,
-      fillGrade: draft.fillGrade!,
-    });
+    if (draft.propulsion && draft.fillGrade) {
+      await vehicleRepo.upsertForUser(user.id, {
+        brand: null,
+        model: null,
+        litersPer100km: draft.litersPer100km ?? null,
+        propulsion: draft.propulsion,
+        fillGrade: draft.fillGrade,
+      });
+    }
 
     return user;
   },

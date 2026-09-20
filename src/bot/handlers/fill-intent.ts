@@ -84,19 +84,23 @@ async function resumeMissingProfile(ctx: BotContext): Promise<boolean> {
     return false;
   }
   const user = await userRepo.findByTelegramId(telegramId);
-  if (!user?.country || !user.vehicle) {
+  if (!user?.country) {
     return false;
   }
 
   const draft: OnboardingDraft = {
-    step: user.vehicle.litersPer100km == null ? "consumption" : "daily_km",
+    step: !user.vehicle
+      ? "propulsion"
+      : user.vehicle.litersPer100km == null
+        ? "consumption"
+        : "daily_km",
     locale: user.locale,
     country: user.country,
     city: user.city ?? undefined,
-    propulsion: user.vehicle.propulsion,
-    fillGrade: user.vehicle.fillGrade,
+    propulsion: user.vehicle?.propulsion,
+    fillGrade: user.vehicle?.fillGrade,
     litersPer100km:
-      user.vehicle.litersPer100km == null
+      user.vehicle?.litersPer100km == null
         ? undefined
         : Number(user.vehicle.litersPer100km),
     dailyKm: user.dailyKm == null ? undefined : Number(user.dailyKm),

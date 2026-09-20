@@ -1,5 +1,5 @@
 import type { Bot } from "grammy";
-import { ALL_FUELS, toggleFuel } from "../../config/constants";
+import { fuelsForCountry, toggleFuel } from "../../config/constants";
 import { onboardingService } from "../../services/onboarding";
 import { subscriptionService } from "../../services/subscription";
 import { adminNotify, formatUser } from "../../services/admin-notify";
@@ -10,7 +10,6 @@ import { t } from "../i18n";
 import { cityKeyboard, menuKeyboard, skipBackKeyboard, watchFuelsInline } from "../keyboards";
 import {
   cityUnknownText,
-  defaultWatchFuels,
   fillGradeForPropulsion,
   isBack,
   isSkip,
@@ -36,7 +35,16 @@ function parseNumber(text: string | undefined) {
 }
 
 async function goBack(ctx: BotContext, draft: OnboardingDraft) {
-  draft.step = previousStep(draft);
+  const prev = previousStep(draft);
+  if (prev === "done") {
+    draft.step = "done";
+    ctx.session.onboarding = draft;
+    await ctx.reply(t(draft.locale ?? ctx.session.locale, "menu.title"), {
+      reply_markup: menuKeyboard(draft.locale ?? ctx.session.locale),
+    });
+    return;
+  }
+  draft.step = prev;
   await promptOnboarding(ctx, draft);
 }
 
@@ -159,7 +167,7 @@ export function registerOnboarding(bot: Bot<BotContext>) {
         return;
       }
       draft.city = resolved.city.slug;
-      draft.step = "propulsion";
+      draft.step = "watch_fuels";
       await promptOnboarding(ctx, draft);
       return;
     }
@@ -177,7 +185,7 @@ export function registerOnboarding(bot: Bot<BotContext>) {
         return;
       }
       draft.propulsion = propulsion;
-      const autoGrade = fillGradeForPropulsion(propulsion);
+      const autoGrade = fillGradeForPropulsion(propulsion, draft.country);
       if (autoGrade) {
         draft.fillGrade = autoGrade;
         draft.step = "consumption";
@@ -185,7 +193,6 @@ export function registerOnboarding(bot: Bot<BotContext>) {
         draft.fillGrade = undefined;
         draft.step = "fill_grade";
       }
-      draft.watchFuels = defaultWatchFuels(autoGrade ?? undefined);
       await promptOnboarding(ctx, draft);
       return;
     }
@@ -197,7 +204,6 @@ export function registerOnboarding(bot: Bot<BotContext>) {
         return;
       }
       draft.fillGrade = grade;
-      draft.watchFuels = defaultWatchFuels(grade);
       draft.step = "consumption";
       await promptOnboarding(ctx, draft);
       return;
@@ -241,9 +247,6 @@ export function registerOnboarding(bot: Bot<BotContext>) {
           return;
         }
         draft.dailyKm = value;
-      }
-      if (!draft.watchFuels?.length) {
-        draft.watchFuels = defaultWatchFuels(draft.fillGrade);
       }
       if (draft.resumeToSavings) {
         try {
@@ -296,7 +299,8 @@ export function registerOnboarding(bot: Bot<BotContext>) {
 
     if (token === "done") {
       if (!draft.watchFuels?.length) {
-        draft.watchFuels = defaultWatchFuels(draft.fillGrade);
+        await ctx.answerCallbackQuery({ text: t(locale, "onboarding.watchNeedOne") });
+        return;
       }
       try {
         await persistDraft(ctx, draft);
@@ -311,15 +315,15 @@ export function registerOnboarding(bot: Bot<BotContext>) {
       return;
     }
 
-    if (!ALL_FUELS.includes(token as FuelKind)) {
+    if (!fuelsForCountry(draft.country).includes(token as FuelKind)) {
       await ctx.answerCallbackQuery();
       return;
     }
-    draft.watchFuels = toggleFuel(draft.watchFuels ?? [], token as FuelKind);
+    draft.watchFuels = toggleFuel(draft.watchFuels ?? [], token as FuelKind, draft.country);
     ctx.session.onboarding = draft;
     await ctx.answerCallbackQuery();
     await ctx.editMessageReplyMarkup({
-      reply_markup: watchFuelsInline(locale, draft.watchFuels),
+      reply_markup: watchFuelsInline(locale, draft.watchFuels, "watch", draft.country),
     });
   });
 }

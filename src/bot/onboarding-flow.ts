@@ -1,6 +1,7 @@
 import type { BotContext } from "./context";
 import { cityExamples, resolveCityInput } from "../config/cities";
 import {
+  DIESEL_GRADES,
   FUEL_LABELS,
   GASOLINE_GRADES,
 } from "../config/constants";
@@ -112,19 +113,25 @@ export function matchPropulsion(text: string): VehiclePropulsion | null {
 
 export function matchFillGrade(text: string): FuelKind | null {
   const n = fold(text);
-  for (const grade of GASOLINE_GRADES) {
+  for (const grade of [...GASOLINE_GRADES, ...DIESEL_GRADES]) {
     if (fold(FUEL_LABELS[grade].ru) === n || fold(FUEL_LABELS[grade].ro) === n) {
       return grade;
     }
   }
-  if (n === "ai92" || n === "a92" || n === "92") {
-    return "AI92";
+  if (n.includes("premium") || n.includes("премиум") || n === "95p" || n === "ai95p") {
+    return "AI95_PREMIUM";
+  }
+  if (n.includes("евро") || n.includes("euro") || n === "dte") {
+    return "DIESEL_EURO";
   }
   if (n === "ai95" || n === "a95" || n === "95") {
     return "AI95";
   }
   if (n === "ai98" || n === "a98" || n === "98") {
     return "AI98";
+  }
+  if (n === "dt" || n === "д т" || n === "дизель") {
+    return "DIESEL";
   }
   return null;
 }
@@ -165,19 +172,22 @@ export function previousStep(draft: OnboardingDraft): OnboardingStep {
       return "language";
     case "city":
       return "country";
+    case "watch_fuels":
+      return "city";
+    case "trial_consent":
+      return "watch_fuels";
     case "car":
     case "propulsion":
-      return "city";
+      return draft.resumeToSavings ? "done" : "city";
     case "fill_grade":
       return "propulsion";
     case "consumption":
-      return draft.propulsion === "GASOLINE" ? "fill_grade" : "propulsion";
+      return draft.propulsion === "GASOLINE" ||
+        (draft.propulsion === "DIESEL" && draft.country === "PMR")
+        ? "fill_grade"
+        : "propulsion";
     case "daily_km":
       return "consumption";
-    case "watch_fuels":
-      return "daily_km";
-    case "trial_consent":
-      return "watch_fuels";
     default:
       return "language";
   }
@@ -187,12 +197,15 @@ export function defaultWatchFuels(fillGrade?: FuelKind): FuelKind[] {
   return fillGrade ? [fillGrade] : [];
 }
 
-export function fillGradeForPropulsion(propulsion: VehiclePropulsion): FuelKind | undefined {
-  if (propulsion === "DIESEL") {
-    return "DIESEL";
-  }
+export function fillGradeForPropulsion(
+  propulsion: VehiclePropulsion,
+  country?: CountryCode,
+): FuelKind | undefined {
   if (propulsion === "LPG") {
     return "LPG";
+  }
+  if (propulsion === "DIESEL" && country === "MD") {
+    return "DIESEL_EURO";
   }
   return undefined;
 }
@@ -240,9 +253,14 @@ export async function promptOnboarding(ctx: BotContext, draft: OnboardingDraft) 
       });
       return;
     case "fill_grade":
-      await ctx.reply(t(locale, "onboarding.fillGrade"), {
-        reply_markup: fillGradeKeyboard(locale),
-      });
+      await ctx.reply(
+        draft.propulsion === "DIESEL"
+          ? t(locale, "onboarding.fillDiesel")
+          : t(locale, "onboarding.fillGrade"),
+        {
+          reply_markup: fillGradeKeyboard(locale, draft.country, draft.propulsion),
+        },
+      );
       return;
     case "consumption":
       await ctx.reply(t(locale, "onboarding.consumption"), {
@@ -256,7 +274,7 @@ export async function promptOnboarding(ctx: BotContext, draft: OnboardingDraft) 
       return;
     case "watch_fuels":
       await ctx.reply(t(locale, "onboarding.watchFuels"), {
-        reply_markup: watchFuelsInline(locale, draft.watchFuels ?? []),
+        reply_markup: watchFuelsInline(locale, draft.watchFuels ?? [], "watch", draft.country),
       });
       return;
     case "trial_consent":

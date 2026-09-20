@@ -4,7 +4,7 @@ import { politeGet } from "../lib/http";
 import type { OfficialPrice } from "../types/price";
 import type { FuelKind } from "../types";
 import type { City } from "../config/cities";
-import { GASOLINE_GRADES } from "../config/constants";
+import { DIESEL_GRADES } from "../config/constants";
 
 interface AnreStation {
   x?: number;
@@ -29,6 +29,7 @@ export interface StationQuote {
   address?: string;
   lat?: number;
   lng?: number;
+  mapQuery?: string;
   prices: { fuel: FuelKind; amount: number }[];
   currencyCode: "MDL" | "PRB";
 }
@@ -86,15 +87,14 @@ function stationInCity(station: AnreStation, city: City) {
 
 function stationPrices(station: AnreStation, watch: FuelKind[]) {
   const prices: { fuel: FuelKind; amount: number }[] = [];
-  if (station.gasoline) {
-    for (const fuel of watch) {
-      if (GASOLINE_GRADES.includes(fuel)) {
-        prices.push({ fuel, amount: station.gasoline });
-      }
-    }
+  if (station.gasoline && watch.includes("AI95")) {
+    prices.push({ fuel: "AI95", amount: station.gasoline });
   }
-  if (watch.includes("DIESEL") && station.diesel) {
-    prices.push({ fuel: "DIESEL", amount: station.diesel });
+  if (station.diesel && watch.some((fuel) => DIESEL_GRADES.includes(fuel))) {
+    prices.push({
+      fuel: watch.includes("DIESEL_EURO") ? "DIESEL_EURO" : "DIESEL",
+      amount: station.diesel,
+    });
   }
   if (watch.includes("LPG") && station.gpl) {
     prices.push({ fuel: "LPG", amount: station.gpl });
@@ -141,7 +141,7 @@ export async function fetchAnreStations(force = false): Promise<OfficialPrice[]>
 
   const prices: OfficialPrice[] = [];
   push(prices, "AI95", median(gasoline));
-  push(prices, "DIESEL", median(diesel));
+  push(prices, "DIESEL_EURO", median(diesel));
   push(prices, "LPG", median(gpl));
   return prices;
 }
@@ -177,6 +177,7 @@ export async function fetchAnreCityStations(
       address: address || undefined,
       lat: geo?.lat,
       lng: geo?.lng,
+      mapQuery: [name, address, city.nameRo || city.nameRu, "Moldova"].filter(Boolean).join(", "),
       prices,
       currencyCode: "MDL",
     });

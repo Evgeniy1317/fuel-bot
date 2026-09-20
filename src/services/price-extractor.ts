@@ -10,9 +10,11 @@ type FuelPattern = { fuel: FuelKind; re: RegExp };
 
 const FUELS: FuelPattern[] = [
   { fuel: "AI98", re: /(?:аи[-\s]?|a[-\s]?|бензин(?:а|ă)?\s*)98/i },
+  { fuel: "AI95_PREMIUM", re: /95\s*п|премиум|premium|95p/i },
   { fuel: "AI95", re: /(?:аи[-\s]?|a[-\s]?|бензин(?:а|ă)?\s*|cor\s*)95/i },
   { fuel: "AI92", re: /(?:аи[-\s]?|a[-\s]?|бензин(?:а|ă)?\s*)92/i },
-  { fuel: "DIESEL", re: /дизель|д\/?т|евро[-\s]?d[tт]|motorin[aă]/i },
+  { fuel: "DIESEL_EURO", re: /дте|д\/?т\s*евро|евро[-\s]?d[tт]|euro\s*d|motorin[aă]\s*euro/i },
+  { fuel: "DIESEL", re: /дизель|(?<![еe]вро\s*)д\/?т(?!\s*евро)|motorin[aă]/i },
   { fuel: "LPG", re: /\bgpl\b|\bгаз\b|суг|личефиат/i },
 ];
 
@@ -95,7 +97,17 @@ export const priceExtractor = {
       }
 
       for (const country of countries) {
-        if (country === "MD" && fuel === "AI92") {
+        if (country === "MD" && (fuel === "AI92" || fuel === "DIESEL")) {
+          if (fuel === "DIESEL") {
+            found.push({
+              country,
+              fuel: "DIESEL_EURO",
+              amount,
+              currencyCode: currencyOf(country),
+              confidence: predicted ? 0.7 : 0.85,
+              predicted,
+            });
+          }
           continue;
         }
         found.push({

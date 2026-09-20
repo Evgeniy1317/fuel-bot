@@ -3,9 +3,12 @@ import { politeGet } from "../lib/http";
 import type { OfficialPrice } from "../types/price";
 import type { FuelKind } from "../types";
 
+/** Классы с https://sheriff.md/activities/nefteprodukty/ceny_po_regionam */
 const SHERIFF_CLASS: Record<string, FuelKind> = {
   "f-98": "AI98",
+  "f-95p": "AI95_PREMIUM",
   "f-95": "AI95",
+  "f-dte": "DIESEL_EURO",
   "f-dt": "DIESEL",
 };
 
@@ -37,7 +40,7 @@ export async function fetchSheriffPrices(force = false): Promise<OfficialPrice[]
     byFuel.set(fuel, amount);
   }
 
-  if (byFuel.size < 3) {
+  if (byFuel.size < 4) {
     console.warn("[sheriff] parsed", [...byFuel.entries()]);
     return [];
   }
