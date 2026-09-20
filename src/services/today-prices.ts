@@ -11,6 +11,7 @@ import { userRepo } from "../repositories/user.repo";
 import type { CountryCode, FuelKind, Locale } from "../types";
 import type { OfficialPrice } from "../types/price";
 import { t } from "../bot/i18n";
+import { blocks, LINE } from "../bot/format";
 import type { BotContext } from "../bot/context";
 import { menuKeyboard } from "../bot/keyboards";
 
@@ -86,7 +87,7 @@ function formatSpot(
       `${mark}<b>${esc(FUEL_LABELS[fuel][locale])}</b>\n<code>${esc(money(hit.amount, hit.currencyCode, locale))}</code>`,
     );
   }
-  return lines;
+  return lines.join(`\n${LINE}\n`);
 }
 
 function watchPrices(spot: OfficialPrice[], watch: FuelKind[]) {
@@ -122,18 +123,18 @@ function formatStations(
     const fuels = quote.prices
       .map((item) => {
         const mark = trendMark(item.amount, previous.get(item.fuel));
-        return `${mark}${esc(FUEL_LABELS[item.fuel][locale])}  <code>${esc(money(item.amount, quote.currencyCode, locale))}</code>`;
+        return `${mark}${esc(FUEL_LABELS[item.fuel][locale])}\n<code>${esc(money(item.amount, quote.currencyCode, locale))}</code>`;
       })
-      .join("\n");
-    const address = quote.address ? `\n<i>${esc(quote.address)}</i>` : "";
-    return `<b>${index + 1}. ${esc(quote.name)}</b>${address}\n${fuels}`;
+      .join(`\n${LINE}\n`);
+    const address = quote.address ? `<i>${esc(quote.address)}</i>` : "";
+    return blocks(`<b>${index + 1}. ${esc(quote.name)}</b>`, address, fuels);
   });
 }
 
 function mapsKeyboard(quotes: StationQuote[], country: CountryCode, locale: Locale) {
   const kb = new InlineKeyboard();
   quotes.forEach((quote, index) => {
-    kb.url(`${t(locale, "prices.map")} ${index + 1}`, quoteMapUrl(quote, country));
+    kb.url(t(locale, "prices.map", { n: index + 1 }), quoteMapUrl(quote, country));
     if (index % 2 === 1) {
       kb.row();
     }
@@ -144,7 +145,7 @@ function mapsKeyboard(quotes: StationQuote[], country: CountryCode, locale: Loca
 function pushChunks(target: string[], header: string, parts: string[]) {
   let current = header;
   for (const part of parts) {
-    const next = current ? `${current}\n\n${part}` : part;
+    const next = current ? `${current}\n\n${LINE}\n\n${part}` : part;
     if (next.length > TELEGRAM_SAFE && current) {
       target.push(current);
       current = part;
@@ -276,9 +277,9 @@ async function sendPriceBundle(ctx: BotContext, mode: "watch" | "all") {
       mode === "all"
         ? t(locale, "prices.all")
         : t(locale, "prices.today", { city: cityName });
-    const spotLines = formatSpot(spot, fuels, locale, previous);
-    const priceText = spotLines.length
-      ? `<b>${esc(headerText)}</b>\n\n${spotLines.join("\n\n")}`
+    const spotBlock = formatSpot(spot, fuels, locale, previous);
+    const priceText = spotBlock
+      ? blocks(`<b>${esc(headerText)}</b>`, spotBlock)
       : esc(t(locale, "prices.empty"));
     const markup = menuKeyboard(locale);
 

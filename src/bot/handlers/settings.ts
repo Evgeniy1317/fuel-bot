@@ -7,6 +7,7 @@ import type { FuelKind, Locale } from "../../types";
 import type { BotContext, SettingsEditField } from "../context";
 import { sendTodayPrices } from "../../services/today-prices";
 import { t } from "../i18n";
+import { blocks } from "../format";
 import {
   cityKeyboard,
   countryKeyboard,
@@ -70,28 +71,28 @@ export async function showSettings(ctx: BotContext) {
     ? user.watchFuels.map((item) => FUEL_LABELS[item][locale]).join(", ")
     : null;
 
-  const card = [
+  const card = blocks(
     t(locale, "settings.title"),
-    "",
-    t(locale, "settings.lineLang", {
-      value: locale === "ro" ? "Română" : "Русский",
-    }),
-    t(locale, "settings.lineCountry", {
-      value: dash(
-        locale,
-        country ? t(locale, country === "PMR" ? "onboarding.countryPmr" : "onboarding.countryMd") : null,
-      ),
-    }),
-    t(locale, "settings.lineCity", {
-      value: dash(locale, user?.city ? cityLabel(user.city, locale) : null),
-    }),
-    t(locale, "settings.lineFuel", { value: dash(locale, fuel) }),
-    t(locale, "settings.lineConsumption", { value: dash(locale, consumption) }),
-    t(locale, "settings.lineDailyKm", { value: dash(locale, dailyKm) }),
-    t(locale, "settings.lineAlerts", { value: dash(locale, alerts) }),
-    "",
+    [
+      t(locale, "settings.lineLang", {
+        value: locale === "ro" ? "Română" : "Русский",
+      }),
+      t(locale, "settings.lineCountry", {
+        value: dash(
+          locale,
+          country ? t(locale, country === "PMR" ? "onboarding.countryPmr" : "onboarding.countryMd") : null,
+        ),
+      }),
+      t(locale, "settings.lineCity", {
+        value: dash(locale, user?.city ? cityLabel(user.city, locale) : null),
+      }),
+      t(locale, "settings.lineFuel", { value: dash(locale, fuel) }),
+      t(locale, "settings.lineConsumption", { value: dash(locale, consumption) }),
+      t(locale, "settings.lineDailyKm", { value: dash(locale, dailyKm) }),
+      t(locale, "settings.lineAlerts", { value: dash(locale, alerts) }),
+    ].join("\n"),
     t(locale, "settings.hint"),
-  ].join("\n");
+  );
 
   ctx.session.editing = undefined;
   await ctx.reply(card, {

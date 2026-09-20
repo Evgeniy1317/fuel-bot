@@ -76,9 +76,12 @@ export const savingsService = {
       await bot.api.sendMessage(
         user.telegramId,
         t(locale, "savings.congrats", {
-          amount: money(saved, input.currencyCode, locale),
+          amount: `<b>${money(saved, input.currencyCode, locale)}</b>`,
         }),
-        { reply_markup: menuKeyboard(locale) },
+        {
+          parse_mode: "HTML",
+          reply_markup: menuKeyboard(locale),
+        },
       );
     }
   },

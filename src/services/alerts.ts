@@ -7,6 +7,7 @@ import { priceRepo } from "../repositories/price.repo";
 import { userRepo } from "../repositories/user.repo";
 import type { AlertKind, AlertPayload, CountryCode, FuelKind, Locale } from "../types";
 import { t } from "../bot/i18n";
+import { blocks } from "../bot/format";
 import type { Bot } from "grammy";
 import type { BotContext } from "../bot/context";
 import { fillTodayKeyboard } from "../bot/keyboards";
@@ -28,32 +29,30 @@ function alreadySent(key: string) {
 
 function renderAlert(locale: Locale, payload: AlertPayload, regionName: string) {
   const fuel = esc(FUEL_LABELS[payload.fuel][locale]);
-  const amount = esc(money(payload.amount, payload.currencyCode, locale));
+  const amount = `<b>${esc(money(payload.amount, payload.currencyCode, locale))}</b>`;
   const previous =
     payload.previousAmount != null
       ? esc(money(payload.previousAmount, payload.currencyCode, locale))
       : "";
   const region = esc(regionName);
-  const boldAmount = `<b>${amount}</b>`;
 
   if (payload.kind === "PRICE_UP" || payload.kind === "PRICE_DOWN") {
+    const title = t(locale, payload.kind === "PRICE_DOWN" ? "alert.down" : "alert.up");
     const change = previous
-      ? t(locale, "alert.wasNow", { previous, amount: boldAmount })
-      : boldAmount;
-    return t(locale, payload.kind === "PRICE_DOWN" ? "alert.down" : "alert.up", {
-      fuel: `<b>${fuel}</b>`,
-      amount: change,
-      region,
-    });
+      ? t(locale, "alert.wasNow", { previous, amount })
+      : amount;
+    return blocks(title, `<b>${fuel}</b>`, change, region);
   }
 
-  const key = payload.advisory ? "alert.hikeNeighbor" : "alert.hikeToday";
-  const body = t(locale, key, {
-    fuel,
+  const body = payload.advisory
+    ? t(locale, "alert.hikeNeighbor")
+    : t(locale, "alert.hikeToday", { fuel: `<b>${fuel}</b>`, amount });
+  return blocks(
+    t(locale, "alert.hikeTitle"),
+    body,
     region,
-    amount: boldAmount,
-  });
-  return `${body}\n\n${esc(t(locale, "alert.fillAsk"))}`;
+    esc(t(locale, "alert.fillAsk")),
+  );
 }
 
 function esc(value: string) {

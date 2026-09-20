@@ -6,6 +6,7 @@ import { savingsRepo } from "../../repositories/savings.repo";
 import { userRepo } from "../../repositories/user.repo";
 import type { BotContext } from "../context";
 import { t } from "../i18n";
+import { blocks } from "../format";
 import { menuKeyboard, needProfileKeyboard } from "../keyboards";
 import { startCalculator } from "./calculator";
 
@@ -44,30 +45,24 @@ export async function showSavingsRating(ctx: BotContext) {
   const totals = await savingsRepo.sumByUser(user.id);
   const rows = await leaderboardService.top();
   const currency = user.country === "MD" ? "MDL" : "PRB";
-  const lines = [
-    t(locale, "savings.summary", {
-      amount: money(Number(totals.amount ?? 0), currency, locale),
-      liters: Number(totals.liters ?? 0).toFixed(0),
-    }),
-    "",
-    t(locale, "leaderboard.title"),
-  ];
+  const summary = t(locale, "savings.summary", {
+    amount: `<b>${money(Number(totals.amount ?? 0), currency, locale)}</b>`,
+    liters: Number(totals.liters ?? 0).toFixed(0),
+  });
+  const board = rows.length
+    ? rows
+        .map((row, index) =>
+          t(locale, "leaderboard.line", {
+            place: index + 1,
+            name: row.displayName,
+            amount: money(row.amount, row.currencyCode, locale),
+          }),
+        )
+        .join("\n")
+    : t(locale, "leaderboard.empty");
 
-  if (!rows.length) {
-    lines.push(t(locale, "leaderboard.empty"));
-  } else {
-    for (const [index, row] of rows.entries()) {
-      lines.push(
-        t(locale, "leaderboard.line", {
-          place: index + 1,
-          name: row.displayName,
-          amount: money(row.amount, row.currencyCode, locale),
-        }),
-      );
-    }
-  }
-
-  await ctx.reply(lines.join("\n"), {
+  await ctx.reply(blocks(summary, `${t(locale, "leaderboard.title")}\n${board}`), {
+    parse_mode: "HTML",
     reply_markup: menuKeyboard(locale),
   });
 }
