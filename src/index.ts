@@ -25,7 +25,7 @@ async function main() {
     { command: "start", description: "Старт / Start" },
     { command: "menu", description: "Меню / Meniu" },
     { command: "subscribe", description: "Подписка / Abonament" },
-    { command: "top", description: "Рейтинг / Clasament" },
+    { command: "top", description: "Экономия / рейтинг" },
     { command: "language", description: "Язык / Limbă" },
   ]);
 

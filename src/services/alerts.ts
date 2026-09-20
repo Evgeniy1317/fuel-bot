@@ -1,11 +1,16 @@
 import { FUEL_LABELS } from "../config/constants";
+import { money } from "../config/currency";
 import { prisma } from "../lib/prisma";
 import { alertRepo } from "../repositories/alert.repo";
+import { fillIntentRepo } from "../repositories/fill-intent.repo";
+import { priceRepo } from "../repositories/price.repo";
 import { userRepo } from "../repositories/user.repo";
 import type { AlertKind, AlertPayload, CountryCode, FuelKind, Locale } from "../types";
 import { t } from "../bot/i18n";
 import type { Bot } from "grammy";
 import type { BotContext } from "../bot/context";
+import { fillTodayKeyboard } from "../bot/keyboards";
+import { savingsService } from "./savings";
 import { subscriptionService } from "./subscription";
 
 const recent = new Map<string, number>();
@@ -23,6 +28,7 @@ function alreadySent(key: string) {
 
 function renderAlert(locale: Locale, payload: AlertPayload, regionName: string) {
   const fuel = FUEL_LABELS[payload.fuel][locale];
+  const amount = money(payload.amount, payload.currencyCode, locale);
   const key = payload.advisory
     ? "alert.hikeNeighbor"
     : payload.kind === "PREDICTED_HIKE"
@@ -31,12 +37,16 @@ function renderAlert(locale: Locale, payload: AlertPayload, regionName: string) 
         ? "alert.down"
         : "alert.up";
 
-  return t(locale, key, {
+  const body = t(locale, key, {
     fuel,
     region: regionName,
-    amount: payload.amount,
-    currency: payload.currencyCode,
+    amount,
   });
+
+  if (payload.kind === "PREDICTED_HIKE") {
+    return `${body}\n\n${t(locale, "alert.fillAsk")}`;
+  }
+  return body;
 }
 
 export const alertService = {
@@ -84,6 +94,10 @@ export const alertService = {
         ? new Date(Date.now() + (input.windowHours ?? 24) * 3600 * 1000)
         : undefined;
 
+    const askFill = input.kind === "PREDICTED_HIKE";
+    const spot = askFill ? await priceRepo.latest(input.country, input.fuel) : null;
+    const fillPrice = spot ? Number(spot.amount) : input.amount;
+
     for (const user of users) {
       if (!subscriptionService.hasAccess(user.subscription)) {
         continue;
@@ -108,7 +122,29 @@ export const alertService = {
       await input.bot.api.sendMessage(
         user.telegramId,
         renderAlert(locale, payload, regionName),
+        askFill && fillPrice > 0
+          ? { reply_markup: fillTodayKeyboard(locale) }
+          : undefined,
       );
+
+      if (askFill && fillPrice > 0) {
+        await fillIntentRepo.replaceOffer({
+          userId: user.id,
+          fuel: input.fuel,
+          country: input.country,
+          priceAtFill: fillPrice,
+          currencyCode: input.currencyCode,
+        });
+      }
+    }
+
+    if (input.kind === "PRICE_UP" || input.kind === "PRICE_DOWN") {
+      await savingsService.settleFills(input.bot, {
+        country: input.country,
+        fuel: input.fuel,
+        amount: input.amount,
+        currencyCode: input.currencyCode,
+      });
     }
   },
 };

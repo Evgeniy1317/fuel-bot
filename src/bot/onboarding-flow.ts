@@ -34,6 +34,7 @@ import {
 function fold(value: string) {
   return value
     .replace(/^✓\s*/, "")
+    .replace(/^⬅️\s*/, "")
     .replace(/^←\s*/, "")
     .trim()
     .toLowerCase()
@@ -41,7 +42,10 @@ function fold(value: string) {
     .replace(/[ăâ]/g, "a")
     .replace(/î/g, "i")
     .replace(/[șş]/g, "s")
-    .replace(/[țţ]/g, "t");
+    .replace(/[țţ]/g, "t")
+    .replace(/[\p{S}\p{P}\p{C}]+/gu, " ")
+    .trim()
+    .replace(/\s+/g, " ");
 }
 
 function same(a: string, b: string) {
@@ -57,35 +61,57 @@ export function isSkip(text: string) {
 }
 
 export function matchLanguage(text: string): Locale | null {
-  if (same(text, "Русский") || same(text, "Russian") || fold(text) === "ru") {
+  if (
+    same(text, "Русский") ||
+    same(text, "🇷🇺 Русский") ||
+    same(text, "Russian") ||
+    fold(text) === "ru"
+  ) {
     return "ru";
   }
-  if (same(text, "Română") || same(text, "Romana") || fold(text) === "ro") {
+  if (
+    same(text, "Română") ||
+    same(text, "🇷🇴 Română") ||
+    same(text, "Romana") ||
+    fold(text) === "ro"
+  ) {
     return "ro";
   }
   return null;
 }
 
 export function matchCountry(text: string): CountryCode | null {
-  const n = fold(text);
-  if (["приднестровье", "transnistria", "pmr", "пмр"].includes(n)) {
+  if (
+    same(text, t("ru", "onboarding.countryPmr")) ||
+    same(text, t("ro", "onboarding.countryPmr")) ||
+    ["pmr", "пмр"].includes(fold(text))
+  ) {
     return "PMR";
   }
-  if (["молдова", "moldova", "md"].includes(n)) {
+  if (
+    same(text, t("ru", "onboarding.countryMd")) ||
+    same(text, t("ro", "onboarding.countryMd")) ||
+    ["md"].includes(fold(text))
+  ) {
     return "MD";
   }
   return null;
 }
 
 export function matchPropulsion(text: string): VehiclePropulsion | null {
-  const n = fold(text);
-  if (["бензин", "benzina", "gasoline"].includes(n)) {
+  if (
+    same(text, t("ru", "onboarding.gasoline")) ||
+    same(text, t("ro", "onboarding.gasoline"))
+  ) {
     return "GASOLINE";
   }
-  if (["дизель", "motorina", "diesel", "дт"].includes(n)) {
+  if (
+    same(text, t("ru", "onboarding.diesel")) ||
+    same(text, t("ro", "onboarding.diesel"))
+  ) {
     return "DIESEL";
   }
-  if (["газ", "gpl", "lpg"].includes(n)) {
+  if (same(text, t("ru", "onboarding.lpg")) || same(text, t("ro", "onboarding.lpg"))) {
     return "LPG";
   }
   return null;
@@ -135,6 +161,26 @@ export function matchTrial(text: string): "yes" | "no" | null {
   return null;
 }
 
+export function matchFillToday(text: string): "yes" | "no" | null {
+  if (same(text, t("ru", "alert.fillYes")) || same(text, t("ro", "alert.fillYes"))) {
+    return "yes";
+  }
+  if (same(text, t("ru", "alert.fillNo")) || same(text, t("ro", "alert.fillNo"))) {
+    return "no";
+  }
+  return null;
+}
+
+export function matchNeedProfile(text: string): "yes" | "back" | null {
+  if (same(text, t("ru", "savings.needYes")) || same(text, t("ro", "savings.needYes"))) {
+    return "yes";
+  }
+  if (isBack(text)) {
+    return "back";
+  }
+  return null;
+}
+
 export function previousStep(draft: OnboardingDraft): OnboardingStep {
   switch (draft.step) {
     case "country":
@@ -142,9 +188,8 @@ export function previousStep(draft: OnboardingDraft): OnboardingStep {
     case "city":
       return "country";
     case "car":
-      return "city";
     case "propulsion":
-      return "car";
+      return "city";
     case "fill_grade":
       return "propulsion";
     case "consumption":
@@ -214,10 +259,6 @@ export async function promptOnboarding(ctx: BotContext, draft: OnboardingDraft) 
       return;
     }
     case "car":
-      await ctx.reply(t(locale, "onboarding.car"), {
-        reply_markup: skipBackKeyboard(locale),
-      });
-      return;
     case "propulsion":
       await ctx.reply(t(locale, "onboarding.propulsion"), {
         reply_markup: propulsionKeyboard(locale),

@@ -41,8 +41,8 @@ export const onboardingService = {
     });
 
     await vehicleRepo.upsertForUser(user.id, {
-      brand: draft.brand ?? null,
-      model: draft.model ?? null,
+      brand: null,
+      model: null,
       litersPer100km: draft.litersPer100km ?? null,
       propulsion: draft.propulsion!,
       fillGrade: draft.fillGrade!,

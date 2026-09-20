@@ -33,3 +33,17 @@ export const ALL_FUELS: FuelKind[] = ["AI92", "AI95", "AI98", "DIESEL", "LPG"];
 export function expandWatchGroups(groups: FuelWatchGroup[]): FuelKind[] {
   return groups.flatMap((group) => WATCH_GROUP_FUELS[group]);
 }
+
+export function groupsFromFuels(fuels: FuelKind[]): FuelWatchGroup[] {
+  const groups: FuelWatchGroup[] = [];
+  if (fuels.some((fuel) => GASOLINE_GRADES.includes(fuel))) {
+    groups.push("GASOLINE");
+  }
+  if (fuels.includes("DIESEL")) {
+    groups.push("DIESEL");
+  }
+  if (fuels.includes("LPG")) {
+    groups.push("LPG");
+  }
+  return groups;
+}

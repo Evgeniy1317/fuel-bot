@@ -1,29 +1,65 @@
 import type { Bot } from "grammy";
-import { savingsService } from "../../services/savings";
-import { budgetService } from "../../services/budget";
+import { money } from "../../config/currency";
+import { leaderboardService } from "../../services/leaderboard";
+import { savingsRepo } from "../../repositories/savings.repo";
 import { userRepo } from "../../repositories/user.repo";
-import type { VehicleInput } from "../../types";
 import type { BotContext } from "../context";
 import { t } from "../i18n";
-import { menuKeyboard } from "../keyboards";
+import { menuKeyboard, needProfileKeyboard } from "../keyboards";
 
-function vehicleFromUser(user: NonNullable<Awaited<ReturnType<typeof userRepo.findByTelegramId>>>) {
-  if (
-    !user.vehicle ||
-    !user.country ||
-    user.dailyKm === null ||
-    user.vehicle.litersPer100km === null
-  ) {
-    return null;
+function profileReady(
+  user: NonNullable<Awaited<ReturnType<typeof userRepo.findByTelegramId>>>,
+) {
+  return user.dailyKm !== null && user.vehicle?.litersPer100km != null;
+}
+
+export async function showSavingsRating(ctx: BotContext) {
+  const locale = ctx.session.locale;
+  const user = await userRepo.findByTelegramId(String(ctx.from?.id));
+  if (!user) {
+    await ctx.reply(t(locale, "savings.empty"), {
+      reply_markup: menuKeyboard(locale),
+    });
+    return;
   }
-  const vehicle: VehicleInput = {
-    brand: user.vehicle.brand,
-    model: user.vehicle.model,
-    litersPer100km: Number(user.vehicle.litersPer100km),
-    propulsion: user.vehicle.propulsion,
-    fillGrade: user.vehicle.fillGrade,
-  };
-  return { vehicle, country: user.country, dailyKm: Number(user.dailyKm) };
+
+  if (!profileReady(user)) {
+    ctx.session.awaitingProfile = true;
+    await ctx.reply(t(locale, "savings.needProfile"), {
+      reply_markup: needProfileKeyboard(locale),
+    });
+    return;
+  }
+
+  const totals = await savingsRepo.sumByUser(user.id);
+  const rows = await leaderboardService.top();
+  const currency = user.country === "MD" ? "MDL" : "PRB";
+  const lines = [
+    t(locale, "savings.summary", {
+      amount: money(Number(totals.amount ?? 0), currency, locale),
+      liters: Number(totals.liters ?? 0).toFixed(0),
+    }),
+    "",
+    t(locale, "leaderboard.title"),
+  ];
+
+  if (!rows.length) {
+    lines.push(t(locale, "leaderboard.empty"));
+  } else {
+    for (const [index, row] of rows.entries()) {
+      lines.push(
+        t(locale, "leaderboard.line", {
+          place: index + 1,
+          name: row.displayName,
+          amount: money(row.amount, row.currencyCode, locale),
+        }),
+      );
+    }
+  }
+
+  await ctx.reply(lines.join("\n"), {
+    reply_markup: menuKeyboard(locale),
+  });
 }
 
 export function registerMenu(bot: Bot<BotContext>) {
@@ -33,51 +69,6 @@ export function registerMenu(bot: Bot<BotContext>) {
     });
   });
 
-  bot.hears(/Моя экономия|Economia mea/, async (ctx) => {
-    const locale = ctx.session.locale;
-    const user = await userRepo.findByTelegramId(String(ctx.from?.id));
-    if (!user) {
-      await ctx.reply(t(locale, "savings.empty"));
-      return;
-    }
-    const input = vehicleFromUser(user);
-    if (!input) {
-      await ctx.reply(t(locale, "savings.empty"));
-      return;
-    }
-    const estimate = await savingsService.estimate(input);
-    if (!estimate) {
-      await ctx.reply(t(locale, "savings.empty"));
-      return;
-    }
-    await ctx.reply(
-      t(locale, "savings.summary", {
-        amount: estimate.costPerMonth.toFixed(0),
-        currency: estimate.currencyCode,
-        liters: (estimate.litersPerDay * 30).toFixed(0),
-      }),
-    );
-  });
-
-  bot.hears(/Бюджет на месяц|Buget lunar/, async (ctx) => {
-    const locale = ctx.session.locale;
-    const user = await userRepo.findByTelegramId(String(ctx.from?.id));
-    const input = user ? vehicleFromUser(user) : null;
-    if (!input) {
-      await ctx.reply(t(locale, "savings.empty"));
-      return;
-    }
-    const forecast = await budgetService.monthlyForecast(input);
-    if (!forecast) {
-      await ctx.reply(t(locale, "savings.empty"));
-      return;
-    }
-    await ctx.reply(
-      t(locale, "savings.summary", {
-        amount: forecast.amount.toFixed(0),
-        currency: forecast.currencyCode,
-        liters: forecast.liters.toFixed(0),
-      }),
-    );
-  });
+  bot.command("top", showSavingsRating);
+  bot.hears(/Экономия|Economie|рейтинг|Clasament/i, showSavingsRating);
 }

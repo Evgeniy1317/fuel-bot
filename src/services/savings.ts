@@ -1,55 +1,85 @@
+import { money } from "../config/currency";
+import { fillIntentRepo } from "../repositories/fill-intent.repo";
 import { priceRepo } from "../repositories/price.repo";
-import type { CountryCode, VehicleInput } from "../types";
+import { savingsRepo } from "../repositories/savings.repo";
+import type { CountryCode, FuelKind, Locale } from "../types";
+import { t } from "../bot/i18n";
+import type { Bot } from "grammy";
+import type { BotContext } from "../bot/context";
+import { menuKeyboard } from "../bot/keyboards";
 
 export interface SavingsEstimate {
   litersPerDay: number;
   costPerDay: number;
   costPerMonth: number;
   currencyCode: string;
-  vsPrevious?: number;
 }
 
-/**
- * Персональный расчёт: расход авто × км/день × цена топлива в регионе.
- */
 export const savingsService = {
   litersPerDay(dailyKm: number, litersPer100km: number) {
     return (dailyKm * litersPer100km) / 100;
   },
 
-  async estimate(input: {
-    country: CountryCode;
-    dailyKm: number;
-    vehicle: VehicleInput;
-  }): Promise<SavingsEstimate | null> {
-    const consumption = input.vehicle.litersPer100km;
-    if (consumption === null) {
-      return null;
+  async settleFills(
+    bot: Bot<BotContext>,
+    input: {
+      country: CountryCode;
+      fuel: FuelKind;
+      amount: number;
+      currencyCode: string;
+    },
+  ) {
+    const intents = await fillIntentRepo.findConfirmed(input.country, input.fuel);
+    for (const intent of intents) {
+      await fillIntentRepo.resolve(intent.id);
+      const oldPrice = Number(intent.priceAtFill);
+      if (!(input.amount > oldPrice + 0.009)) {
+        continue;
+      }
+
+      const user = intent.user;
+      const locale = user.locale as Locale;
+      const dailyKm = user.dailyKm === null ? null : Number(user.dailyKm);
+      const consumption =
+        user.vehicle?.litersPer100km == null
+          ? null
+          : Number(user.vehicle.litersPer100km);
+
+      if (dailyKm === null || consumption === null) {
+        await bot.api.sendMessage(user.telegramId, t(locale, "savings.needNumbers"), {
+          reply_markup: menuKeyboard(locale),
+        });
+        continue;
+      }
+
+      const liters = this.litersPerDay(dailyKm, consumption);
+      const saved = (input.amount - oldPrice) * liters;
+      if (saved <= 0) {
+        continue;
+      }
+
+      const now = new Date();
+      await savingsRepo.add({
+        userId: user.id,
+        amount: saved,
+        currencyCode: input.currencyCode,
+        liters,
+        periodStart: intent.createdAt,
+        periodEnd: now,
+        meta: {
+          fuel: input.fuel,
+          oldPrice,
+          newPrice: input.amount,
+        },
+      });
+
+      await bot.api.sendMessage(
+        user.telegramId,
+        t(locale, "savings.congrats", {
+          amount: money(saved, input.currencyCode, locale),
+        }),
+        { reply_markup: menuKeyboard(locale) },
+      );
     }
-    const latest = await priceRepo.latest(input.country, input.vehicle.fillGrade);
-    if (!latest) {
-      return null;
-    }
-
-    const liters = this.litersPerDay(input.dailyKm, consumption);
-    const price = Number(latest.amount);
-    const costPerDay = liters * price;
-
-    return {
-      litersPerDay: liters,
-      costPerDay,
-      costPerMonth: costPerDay * 30,
-      currencyCode: latest.currencyCode,
-      // TODO: сравнить с предыдущей ценой / «если заправился вчера vs сегодня»
-      vsPrevious: undefined,
-    };
-  },
-
-  /**
-   * TODO: зафиксировать дневную экономию в SavingsRecord для рейтинга.
-   * Экономия = (цена без алерта − цена после алерта) × литры.
-   */
-  async recordDaily(_userId: string): Promise<void> {
-    throw new Error("TODO: daily savings snapshot");
   },
 };

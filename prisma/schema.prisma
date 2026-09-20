@@ -63,6 +63,12 @@ enum PriceSource {
   MANUAL
 }
 
+enum FillIntentStatus {
+  OFFERED
+  CONFIRMED
+  RESOLVED
+}
+
 model User {
   id             String    @id @default(cuid())
   telegramId     String    @unique
@@ -83,6 +89,7 @@ model User {
   subscription   Subscription?
   alerts         Alert[]
   savings        SavingsRecord[]
+  fillIntents    FillIntent[]
 
   @@index([country])
 }
@@ -158,6 +165,22 @@ model Subscription {
   complimentaryReason  String?
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
+}
+
+model FillIntent {
+  id           String           @id @default(cuid())
+  userId       String
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fuel         FuelKind
+  country      CountryCode
+  priceAtFill  Decimal          @db.Decimal(10, 3)
+  currencyCode String
+  status       FillIntentStatus @default(OFFERED)
+  createdAt    DateTime         @default(now())
+  resolvedAt   DateTime?
+
+  @@index([userId, status])
+  @@index([country, fuel, status])
 }
 
 model SavingsRecord {

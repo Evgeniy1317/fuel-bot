@@ -5,6 +5,7 @@ import { sessionMiddleware } from "./bot/middlewares/session";
 import { hydrateUser } from "./bot/middlewares/hydrate-user";
 import { registerStart } from "./bot/handlers/start";
 import { registerOnboarding } from "./bot/handlers/onboarding";
+import { registerFillIntent } from "./bot/handlers/fill-intent";
 import { registerMenu } from "./bot/handlers/menu";
 import { registerSubscription } from "./bot/handlers/subscription";
 import { registerLeaderboard } from "./bot/handlers/leaderboard";
@@ -21,6 +22,7 @@ export function createBot() {
   registerChannelIngest(bot);
   registerStart(bot);
   registerOnboarding(bot);
+  registerFillIntent(bot);
   registerSettings(bot);
   registerMenu(bot);
   registerSubscription(bot);

@@ -24,6 +24,7 @@ import {
   resolveCity,
   watchListText,
 } from "../onboarding-flow";
+import { showSavingsRating } from "./menu";
 
 function parseNumber(text: string | undefined) {
   if (!text) {
@@ -159,20 +160,12 @@ export function registerOnboarding(bot: Bot<BotContext>) {
         return;
       }
       draft.city = resolved.city.slug;
-      draft.step = "car";
+      draft.step = "propulsion";
       await promptOnboarding(ctx, draft);
       return;
     }
 
     if (draft.step === "car") {
-      if (isSkip(text)) {
-        draft.brand = undefined;
-        draft.model = undefined;
-      } else {
-        const parts = text.split(/\s+/);
-        draft.brand = parts[0] ?? "";
-        draft.model = parts.slice(1).join(" ") || parts[0] || "";
-      }
       draft.step = "propulsion";
       await promptOnboarding(ctx, draft);
       return;
@@ -212,6 +205,10 @@ export function registerOnboarding(bot: Bot<BotContext>) {
 
     if (draft.step === "consumption") {
       if (isSkip(text)) {
+        if (draft.resumeToSavings) {
+          await promptOnboarding(ctx, draft);
+          return;
+        }
         draft.litersPer100km = undefined;
       } else {
         const value = parseNumber(text);
@@ -230,6 +227,10 @@ export function registerOnboarding(bot: Bot<BotContext>) {
 
     if (draft.step === "daily_km") {
       if (isSkip(text)) {
+        if (draft.resumeToSavings) {
+          await promptOnboarding(ctx, draft);
+          return;
+        }
         draft.dailyKm = undefined;
       } else {
         const value = parseNumber(text);
@@ -243,6 +244,18 @@ export function registerOnboarding(bot: Bot<BotContext>) {
       }
       if (!draft.watchGroups?.length) {
         draft.watchGroups = defaultWatchGroups(draft.propulsion);
+      }
+      if (draft.resumeToSavings) {
+        try {
+          await persistDraft(ctx, draft);
+        } catch {
+          await ctx.reply(t(locale, "errors.generic"));
+          return;
+        }
+        draft.step = "done";
+        ctx.session.onboarding = draft;
+        await showSavingsRating(ctx);
+        return;
       }
       draft.step = "watch_fuels";
       await promptOnboarding(ctx, draft);

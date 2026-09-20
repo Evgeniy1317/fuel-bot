@@ -19,7 +19,7 @@ function navRow(kb: Keyboard, locale: Locale, opts: { skip?: boolean; back?: boo
 }
 
 export function languageKeyboard() {
-  return new Keyboard().text("Русский").text("Română").resized();
+  return new Keyboard().text("🇷🇺 Русский").text("🇷🇴 Română").resized();
 }
 
 export function countryKeyboard(locale: Locale) {
@@ -92,14 +92,26 @@ export function trialChoiceKeyboard(locale: Locale) {
     .resized();
 }
 
+export function fillTodayKeyboard(locale: Locale) {
+  return new Keyboard()
+    .text(t(locale, "alert.fillYes"))
+    .text(t(locale, "alert.fillNo"))
+    .resized();
+}
+
+export function needProfileKeyboard(locale: Locale) {
+  return new Keyboard()
+    .text(t(locale, "savings.needYes"))
+    .row()
+    .text(t(locale, "onboarding.back"))
+    .resized();
+}
+
 export function menuKeyboard(locale: Locale) {
   return new Keyboard()
     .text(t(locale, "menu.savings"))
-    .text(t(locale, "menu.budget"))
     .row()
     .text(t(locale, "menu.subscribe"))
-    .text(t(locale, "menu.leaderboard"))
-    .row()
     .text(t(locale, "menu.settings"))
     .resized();
 }

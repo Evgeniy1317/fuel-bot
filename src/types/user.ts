@@ -31,6 +31,7 @@ export interface OnboardingDraft {
   litersPer100km?: number;
   dailyKm?: number;
   watchGroups?: FuelWatchGroup[];
+  resumeToSavings?: boolean;
 }
 
 export interface UserProfile {
