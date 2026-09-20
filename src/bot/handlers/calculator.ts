@@ -3,11 +3,12 @@ import { ALL_FUELS, FUEL_LABELS } from "../../config/constants";
 import { money } from "../../config/currency";
 import { userRepo } from "../../repositories/user.repo";
 import { currentFuelPrice, liveFuelKinds } from "../../services/today-prices";
-import type { FuelKind } from "../../types";
+import type { CountryCode, FuelKind } from "../../types";
 import type { BotContext } from "../context";
 import { t } from "../i18n";
 import { blocks } from "../format";
 import { calcFuelKeyboard, menuKeyboard } from "../keyboards";
+import { isBack } from "../onboarding-flow";
 
 function wizardOpen(ctx: BotContext) {
   return Boolean(ctx.session.onboarding && ctx.session.onboarding.step !== "done");
@@ -27,6 +28,27 @@ function roundLiters(value: number) {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
 }
 
+async function showFuelList(ctx: BotContext, country: CountryCode, resetMenu = false) {
+  const locale = ctx.session.locale;
+  const fuels = await liveFuelKinds(country);
+  if (!fuels.length) {
+    ctx.session.calc = undefined;
+    await ctx.reply(t(locale, "calc.noPrice"), {
+      reply_markup: menuKeyboard(locale),
+    });
+    return;
+  }
+  ctx.session.calc = { step: "fuel", country };
+  if (resetMenu) {
+    await ctx.reply(t(locale, "menu.calc"), {
+      reply_markup: menuKeyboard(locale),
+    });
+  }
+  await ctx.reply(blocks(t(locale, "menu.calc"), t(locale, "calc.ask")), {
+    reply_markup: calcFuelKeyboard(locale, country, fuels),
+  });
+}
+
 export async function startCalculator(ctx: BotContext) {
   const locale = ctx.session.locale;
   ctx.session.editing = undefined;
@@ -41,17 +63,7 @@ export async function startCalculator(ctx: BotContext) {
     return;
   }
 
-  ctx.session.calc = { step: "fuel", country: user.country };
-  const fuels = await liveFuelKinds(user.country);
-  if (!fuels.length) {
-    await ctx.reply(t(locale, "calc.noPrice"), {
-      reply_markup: menuKeyboard(locale),
-    });
-    return;
-  }
-  await ctx.reply(blocks(t(locale, "menu.calc"), t(locale, "calc.ask")), {
-    reply_markup: calcFuelKeyboard(locale, user.country, fuels),
-  });
+  await showFuelList(ctx, user.country);
 }
 
 export function registerCalculator(bot: Bot<BotContext>) {
@@ -62,8 +74,17 @@ export function registerCalculator(bot: Bot<BotContext>) {
     }
 
     const locale = ctx.session.locale;
-    const fuel = ctx.match[1];
-    if (!isFuelKind(fuel)) {
+    const token = ctx.match[1];
+    if (token === "back") {
+      const country = ctx.session.calc?.country;
+      if (country) {
+        await showFuelList(ctx, country, true);
+      } else {
+        await startCalculator(ctx);
+      }
+      return;
+    }
+    if (!isFuelKind(token)) {
       return;
     }
 
@@ -77,7 +98,7 @@ export function registerCalculator(bot: Bot<BotContext>) {
       return;
     }
 
-    const price = await currentFuelPrice(country, fuel);
+    const price = await currentFuelPrice(country, token);
     if (!price) {
       await ctx.reply(t(locale, "calc.noPrice"), {
         reply_markup: calcFuelKeyboard(locale, country),
@@ -87,7 +108,7 @@ export function registerCalculator(bot: Bot<BotContext>) {
 
     ctx.session.calc = {
       step: "amount",
-      fuel,
+      fuel: token,
       country,
       price: price.amount,
       currencyCode: price.currencyCode,
@@ -95,13 +116,13 @@ export function registerCalculator(bot: Bot<BotContext>) {
 
     await ctx.reply(
       blocks(
-        `🧮  <b>${FUEL_LABELS[fuel][locale]}</b>`,
+        `🧮  <b>${FUEL_LABELS[token][locale]}</b>`,
         t(locale, "calc.priceNow", {
           price: `<code>${money(price.amount, price.currencyCode, locale)}</code>`,
         }),
         t(locale, "calc.amount"),
       ),
-      { parse_mode: "HTML", reply_markup: menuKeyboard(locale) },
+      { parse_mode: "HTML", reply_markup: menuKeyboard(locale, { back: true }) },
     );
   });
 
@@ -112,14 +133,24 @@ export function registerCalculator(bot: Bot<BotContext>) {
     }
 
     const locale = ctx.session.locale;
-    const amount = parseAmount(ctx.message.text);
+    const text = ctx.message.text.trim();
+    if (isBack(text)) {
+      const country = ctx.session.calc.country;
+      if (country) {
+        await showFuelList(ctx, country, true);
+      } else {
+        await startCalculator(ctx);
+      }
+      return;
+    }
+
+    const amount = parseAmount(text);
     const calc = ctx.session.calc;
     if (!amount || !calc.fuel || !calc.price || !calc.currencyCode) {
       await ctx.reply(t(locale, "errors.number"));
       return;
     }
 
-    const fuels = calc.country ? await liveFuelKinds(calc.country) : undefined;
     await ctx.reply(
       blocks(
         `🧮  <b>${FUEL_LABELS[calc.fuel][locale]}</b>`,
@@ -130,7 +161,7 @@ export function registerCalculator(bot: Bot<BotContext>) {
       ),
       {
         parse_mode: "HTML",
-        reply_markup: calcFuelKeyboard(locale, calc.country, fuels),
+        reply_markup: menuKeyboard(locale, { back: true }),
       },
     );
   });

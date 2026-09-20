@@ -160,8 +160,12 @@ export function needProfileKeyboard(locale: Locale) {
     .resized();
 }
 
-export function menuKeyboard(locale: Locale) {
-  return new Keyboard()
+export function menuKeyboard(locale: Locale, opts?: { back?: boolean }) {
+  const kb = new Keyboard();
+  if (opts?.back) {
+    kb.text(t(locale, "onboarding.back")).row();
+  }
+  return kb
     .text(t(locale, "menu.allPrices"))
     .text(t(locale, "menu.myCity"))
     .row()
