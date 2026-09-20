@@ -50,6 +50,7 @@ function renderAlert(locale: Locale, payload: AlertPayload, regionName: string) 
   return blocks(
     t(locale, "alert.hikeTitle"),
     body,
+    payload.confirmed ? t(locale, "alert.confirmed") : "",
     region,
     esc(t(locale, "alert.fillAsk")),
   );
@@ -70,6 +71,7 @@ export const alertService = {
     previousAmount?: number;
     windowHours?: number;
     advisory?: boolean;
+    confirmed?: boolean;
   }) {
     const dedupKey = `${input.country}:${input.fuel}:${input.kind}:${input.advisory ? "adv" : input.amount}`;
     if (alreadySent(dedupKey)) {
@@ -93,6 +95,7 @@ export const alertService = {
           : undefined,
       windowHours: input.windowHours,
       advisory: input.advisory,
+      confirmed: input.confirmed,
     };
 
     const users = input.advisory

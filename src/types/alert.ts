@@ -14,6 +14,7 @@ export interface AlertPayload {
   windowHours?: number;
   /** Соседний рынок / мягкий намёк — без суммы в гарантии. */
   advisory?: boolean;
+  confirmed?: boolean;
 }
 
 export interface ExtractedPrice {

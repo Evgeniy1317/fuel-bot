@@ -18,7 +18,7 @@ export function registerChannelIngest(bot: Bot<BotContext>) {
       source: "TG_CHANNEL",
       externalId: `${chatId}:${post.message_id}`,
       rawText: post.text,
-      channelId: chatId,
+      channelId: ctx.chat.username ?? chatId,
     });
   });
 }

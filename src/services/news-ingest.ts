@@ -1,20 +1,29 @@
 import type { Bot } from "grammy";
 import type { BotContext } from "../bot/context";
 import { env } from "../config/env";
+import { telegramMeta } from "../config/news-sources";
 import { newsEventRepo } from "../repositories/news-event.repo";
 import { priceRepo } from "../repositories/price.repo";
-import { alertService } from "./alerts";
 import { priceExtractor } from "./price-extractor";
 import { predictionService } from "./prediction";
+import { recommendationService } from "./recommendation";
 import type { OfficialPrice } from "../types/price";
-import type { AlertKind } from "../types";
+import type { AlertKind, CountryCode } from "../types";
 
 export interface NewsIngestInput {
   source: "TG_CHANNEL" | "NEWS_SITE" | "API";
   externalId: string;
   rawText: string;
   channelId?: string;
+  countryHint?: CountryCode;
   skipAlerts?: boolean;
+}
+
+function inferKind(amount: number, previous?: number): AlertKind {
+  if (previous !== undefined && amount < previous) {
+    return "PRICE_DOWN";
+  }
+  return "PRICE_UP";
 }
 
 export const newsIngestService = {
@@ -34,22 +43,39 @@ export const newsIngestService = {
       return { skipped: true as const };
     }
 
-    const extracted = priceExtractor.extract(input.rawText);
+    const hint = {
+      country: input.countryHint ?? telegramMeta(input.channelId ?? "")?.country,
+      channel: input.channelId,
+    };
+    const extracted = priceExtractor.extract(input.rawText, hint);
     await newsEventRepo.save({
       source,
       externalId: input.externalId,
       rawText: input.rawText,
       extracted,
+      country: hint.country,
     });
 
     if (input.skipAlerts) {
       return { skipped: true as const, extracted };
     }
 
+    const origin = input.channelId || source;
+    if (!extracted.length && priceExtractor.isFuelTopic(input.rawText) && priceExtractor.isPredicted(input.rawText)) {
+      const country = hint.country ?? (priceExtractor.isMoldova(input.rawText, hint) ? "MD" : undefined);
+      if (country) {
+        await recommendationService.hikeWithoutPrice(bot, {
+          source: origin,
+          country,
+          advisory: true,
+        });
+      }
+    }
+
     for (const price of extracted) {
       if (price.predicted) {
-        await alertService.dispatch({
-          bot,
+        await recommendationService.consider(bot, {
+          source: origin,
           kind: "PREDICTED_HIKE",
           country: price.country,
           fuel: price.fuel,
@@ -61,24 +87,9 @@ export const newsIngestService = {
       }
 
       const previous = await priceRepo.latest(price.country, price.fuel);
-      await priceRepo.insert({
-        country: price.country,
-        fuel: price.fuel,
-        amount: price.amount,
-        currencyCode: price.currencyCode,
-        source,
-        sourceRef: input.externalId,
-        publishedAt: price.publishedAt,
-      });
-
-      const kind: AlertKind = inferKind(
-        price.amount,
-        previous ? Number(previous.amount) : undefined,
-      );
-
-      await alertService.dispatch({
-        bot,
-        kind,
+      await recommendationService.consider(bot, {
+        source: origin,
+        kind: inferKind(price.amount, previous ? Number(previous.amount) : undefined),
         country: price.country,
         fuel: price.fuel,
         amount: price.amount,
@@ -87,7 +98,7 @@ export const newsIngestService = {
       });
     }
 
-    if (priceExtractor.isMoldovaTomorrowHike(input.rawText, input.channelId)) {
+    if (priceExtractor.isMoldovaTomorrowHike(input.rawText, hint)) {
       await predictionService.pmrHeadsUp(bot);
     }
 
@@ -115,19 +126,14 @@ export const newsIngestService = {
         continue;
       }
 
-      const kind: AlertKind = inferKind(
-        price.amount,
-        previous ? Number(previous.amount) : undefined,
-      );
-
-      await alertService.dispatch({
-        bot,
-        kind,
+      await recommendationService.consider(bot, {
+        source: price.country === "MD" ? "API" : "sheriff",
+        kind: inferKind(price.amount, Number(previous.amount)),
         country: price.country,
         fuel: price.fuel,
         amount: price.amount,
         currencyCode: price.currencyCode,
-        previousAmount: previous ? Number(previous.amount) : undefined,
+        previousAmount: Number(previous.amount),
       });
     }
   },
@@ -136,13 +142,3 @@ export const newsIngestService = {
     await predictionService.ingestCeiling(bot, prices);
   },
 };
-
-function inferKind(amount: number, previous?: number): AlertKind {
-  if (previous === undefined) {
-    return "PRICE_UP";
-  }
-  if (amount < previous) {
-    return "PRICE_DOWN";
-  }
-  return "PRICE_UP";
-}

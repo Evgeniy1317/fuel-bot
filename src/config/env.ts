@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { z } from "zod";
+import { SITE_SOURCES, telegramUsernames } from "./news-sources";
 
 const envSchema = z.object({
   BOT_TOKEN: z.string().min(1),
@@ -33,14 +34,14 @@ const envSchema = z.object({
     .string()
     .optional()
     .transform((value) =>
-      (value ?? "")
+      (value ?? SITE_SOURCES.map((item) => item.url).join(","))
         .split(",")
         .map((url) => url.trim())
         .filter(Boolean),
     ),
   TELEGRAM_PREVIEW_CHANNELS: z
     .string()
-    .default("pridnestrovec,anre_md")
+    .default(telegramUsernames().join(","))
     .transform((value) =>
       value
         .split(",")

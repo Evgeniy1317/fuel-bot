@@ -9,7 +9,9 @@ export const FETCH_LIMITS = {
   anreApiMs: 15 * 60 * 1000,
   anreSiteMs: 30 * 60 * 1000,
   sheriffMs: 30 * 60 * 1000,
-  telegramPreviewMs: 30 * 60 * 1000,
+  telegramPreviewMs: 20 * 60 * 1000,
+  newsSiteMs: 30 * 60 * 1000,
+  hostGapMs: 8000,
   backoffOnBlockMs: 6 * 60 * 60 * 1000,
 } as const;
 

@@ -2,7 +2,7 @@ import type { Bot } from "grammy";
 import type { BotContext } from "../bot/context";
 import { newsEventRepo } from "../repositories/news-event.repo";
 import { priceRepo } from "../repositories/price.repo";
-import { alertService } from "./alerts";
+import { recommendationService } from "./recommendation";
 import type { OfficialPrice } from "../types/price";
 
 function dayKey(date = new Date()) {
@@ -56,8 +56,8 @@ export const predictionService = {
         mdHike = true;
       }
 
-      await alertService.dispatch({
-        bot,
+      await recommendationService.consider(bot, {
+        source: "ceiling",
         kind: "PREDICTED_HIKE",
         country: price.country,
         fuel: price.fuel,
@@ -86,8 +86,8 @@ export const predictionService = {
     });
 
     const current95 = await priceRepo.latest("PMR", "AI95");
-    await alertService.dispatch({
-      bot,
+    await recommendationService.consider(bot, {
+      source: "ceiling",
       kind: "PREDICTED_HIKE",
       country: "PMR",
       fuel: "AI95",

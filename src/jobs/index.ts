@@ -2,10 +2,12 @@ import cron from "node-cron";
 import type { Bot } from "grammy";
 import type { BotContext } from "../bot/context";
 import { env } from "../config/env";
+import { SITE_SOURCES, telegramMeta } from "../config/news-sources";
 import { newsIngestService } from "../services/news-ingest";
 import { priceProvider } from "../services/price-provider";
 import { guaranteeService } from "../services/guarantee";
 import { fetchTelegramPreview } from "../providers/telegram-preview";
+import { fetchNewsSite } from "../providers/news-sites";
 
 async function safe(name: string, fn: () => Promise<void>) {
   try {
@@ -15,8 +17,23 @@ async function safe(name: string, fn: () => Promise<void>) {
   }
 }
 
+let tgCursor = 0;
+let siteCursor = 0;
+
+function nextBatch<T>(list: T[], cursor: number, size: number) {
+  if (!list.length) {
+    return { items: [] as T[], cursor };
+  }
+  const items: T[] = [];
+  let index = cursor;
+  for (let i = 0; i < Math.min(size, list.length); i += 1) {
+    items.push(list[index]!);
+    index = (index + 1) % list.length;
+  }
+  return { items, cursor: index };
+}
+
 export function startJobs(bot: Bot<BotContext>) {
-  // Молдова: официальный JSON, не HTML.
   cron.schedule(
     "7,27,47 * * * *",
     () =>
@@ -27,7 +44,6 @@ export function startJobs(bot: Bot<BotContext>) {
     { timezone: env.TZ },
   );
 
-  // Потолок ANRE на завтра — редкий GET главной страницы.
   cron.schedule(
     "11,41 * * * *",
     () =>
@@ -38,7 +54,6 @@ export function startJobs(bot: Bot<BotContext>) {
     { timezone: env.TZ },
   );
 
-  // ПМР: одна страница Шерифа, не чаще 30 мин, со сдвигом от ANRE.
   cron.schedule(
     "19,49 * * * *",
     () =>
@@ -49,13 +64,15 @@ export function startJobs(bot: Bot<BotContext>) {
     { timezone: env.TZ },
   );
 
-  // Публичные t.me/s/… по одному каналу, редко. Для «завтра подорожает» в ПМР.
   cron.schedule(
-    "23,53 * * * *",
+    "8,20,32,44,56 * * * *",
     () =>
       safe("tg-preview", async () => {
-        for (const channel of env.TELEGRAM_PREVIEW_CHANNELS) {
+        const { items, cursor } = nextBatch(env.TELEGRAM_PREVIEW_CHANNELS, tgCursor, 1);
+        tgCursor = cursor;
+        for (const channel of items) {
           const posts = await fetchTelegramPreview(channel);
+          const meta = telegramMeta(channel);
           for (const post of posts) {
             const ageMs = post.at ? Date.now() - post.at.getTime() : Number.POSITIVE_INFINITY;
             await newsIngestService.ingest(bot, {
@@ -63,7 +80,35 @@ export function startJobs(bot: Bot<BotContext>) {
               externalId: `preview:${post.channel}:${post.messageId}`,
               rawText: post.text,
               channelId: post.channel,
-              skipAlerts: ageMs > 3 * 60 * 60 * 1000,
+              countryHint: meta?.country,
+              skipAlerts: ageMs > 90 * 60 * 1000,
+            });
+          }
+        }
+      }),
+    { timezone: env.TZ },
+  );
+
+  cron.schedule(
+    "5,35 * * * *",
+    () =>
+      safe("news-sites", async () => {
+        const urls = env.NEWS_SITE_URLS.length
+          ? env.NEWS_SITE_URLS
+          : SITE_SOURCES.map((item) => item.url);
+        const { items, cursor } = nextBatch(urls, siteCursor, 1);
+        siteCursor = cursor;
+        for (const url of items) {
+          const articles = await fetchNewsSite(url);
+          for (const article of articles) {
+            const ageMs = article.at ? Date.now() - article.at.getTime() : Number.POSITIVE_INFINITY;
+            await newsIngestService.ingest(bot, {
+              source: "NEWS_SITE",
+              externalId: article.externalId,
+              rawText: article.text,
+              channelId: url,
+              countryHint: article.country,
+            skipAlerts: !article.at || (Number.isFinite(ageMs) && ageMs > 12 * 60 * 60 * 1000),
             });
           }
         }

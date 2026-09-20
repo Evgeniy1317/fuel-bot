@@ -70,5 +70,5 @@ export async function fetchTelegramPreview(
     });
   }
 
-  return posts.slice(-8);
+  return posts.slice(-12);
 }
