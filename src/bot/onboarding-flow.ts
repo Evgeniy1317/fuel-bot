@@ -7,13 +7,10 @@ import {
 import {
   FUEL_LABELS,
   GASOLINE_GRADES,
-  WATCH_GROUP_LABELS,
-  WATCH_GROUPS,
 } from "../config/constants";
 import type {
   CountryCode,
   FuelKind,
-  FuelWatchGroup,
   Locale,
   OnboardingDraft,
   OnboardingStep,
@@ -28,7 +25,7 @@ import {
   propulsionKeyboard,
   skipBackKeyboard,
   trialKeyboard,
-  watchGroupsKeyboard,
+  watchFuelsInline,
 } from "./keyboards";
 
 function fold(value: string) {
@@ -136,21 +133,6 @@ export function matchFillGrade(text: string): FuelKind | null {
   return null;
 }
 
-export function matchWatchAction(
-  text: string,
-): FuelWatchGroup | "done" | null {
-  if (same(text, t("ru", "onboarding.watchDone")) || same(text, t("ro", "onboarding.watchDone"))) {
-    return "done";
-  }
-  const n = fold(text);
-  for (const group of WATCH_GROUPS) {
-    if (n === fold(WATCH_GROUP_LABELS[group].ru) || n === fold(WATCH_GROUP_LABELS[group].ro)) {
-      return group;
-    }
-  }
-  return null;
-}
-
 export function matchTrial(text: string): "yes" | "no" | null {
   if (same(text, t("ru", "onboarding.trialYes")) || same(text, t("ro", "onboarding.trialYes"))) {
     return "yes";
@@ -205,14 +187,8 @@ export function previousStep(draft: OnboardingDraft): OnboardingStep {
   }
 }
 
-export function defaultWatchGroups(propulsion?: VehiclePropulsion): FuelWatchGroup[] {
-  if (propulsion === "DIESEL") {
-    return ["DIESEL"];
-  }
-  if (propulsion === "LPG") {
-    return ["LPG"];
-  }
-  return ["GASOLINE"];
+export function defaultWatchFuels(fillGrade?: FuelKind): FuelKind[] {
+  return fillGrade ? [fillGrade] : [];
 }
 
 export function fillGradeForPropulsion(propulsion: VehiclePropulsion): FuelKind | undefined {
@@ -225,11 +201,11 @@ export function fillGradeForPropulsion(propulsion: VehiclePropulsion): FuelKind 
   return undefined;
 }
 
-export function watchListText(locale: Locale, groups: FuelWatchGroup[]) {
-  if (!groups.length) {
+export function watchListText(locale: Locale, fuels: FuelKind[]) {
+  if (!fuels.length) {
     return t(locale, "onboarding.watchNone");
   }
-  const list = groups.map((group) => WATCH_GROUP_LABELS[group][locale]).join(", ");
+  const list = fuels.map((fuel) => FUEL_LABELS[fuel][locale]).join(", ");
   return t(locale, "onboarding.watchSelected", { list });
 }
 
@@ -280,10 +256,9 @@ export async function promptOnboarding(ctx: BotContext, draft: OnboardingDraft) 
       });
       return;
     case "watch_fuels":
-      await ctx.reply(
-        `${t(locale, "onboarding.watchFuels")}\n${watchListText(locale, draft.watchGroups ?? [])}`,
-        { reply_markup: watchGroupsKeyboard(locale, draft.watchGroups ?? []) },
-      );
+      await ctx.reply(t(locale, "onboarding.watchFuels"), {
+        reply_markup: watchFuelsInline(locale, draft.watchFuels ?? []),
+      });
       return;
     case "trial_consent":
       await ctx.reply(t(locale, "onboarding.trialAsk"), {

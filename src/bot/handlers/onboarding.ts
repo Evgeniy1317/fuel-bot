@@ -1,15 +1,15 @@
 import type { Bot } from "grammy";
-import { WATCH_GROUPS } from "../../config/constants";
+import { ALL_FUELS, toggleFuel } from "../../config/constants";
 import { onboardingService } from "../../services/onboarding";
 import { subscriptionService } from "../../services/subscription";
 import { adminNotify, formatUser } from "../../services/admin-notify";
 import { userRepo } from "../../repositories/user.repo";
-import type { FuelWatchGroup, OnboardingDraft } from "../../types";
+import type { FuelKind, OnboardingDraft } from "../../types";
 import type { BotContext } from "../context";
 import { t } from "../i18n";
-import { backKeyboard, menuKeyboard, skipBackKeyboard, watchGroupsKeyboard } from "../keyboards";
+import { backKeyboard, menuKeyboard, skipBackKeyboard, watchFuelsInline } from "../keyboards";
 import {
-  defaultWatchGroups,
+  defaultWatchFuels,
   fillGradeForPropulsion,
   isBack,
   isSkip,
@@ -18,11 +18,9 @@ import {
   matchLanguage,
   matchPropulsion,
   matchTrial,
-  matchWatchAction,
   previousStep,
   promptOnboarding,
   resolveCity,
-  watchListText,
 } from "../onboarding-flow";
 import { showSavingsRating } from "./menu";
 
@@ -50,10 +48,6 @@ async function persistDraft(ctx: BotContext, draft: OnboardingDraft) {
     { username: ctx.from?.username, firstName: ctx.from?.first_name },
     draft,
   );
-}
-
-function orderedWatchGroups(selected: Set<FuelWatchGroup>): FuelWatchGroup[] {
-  return WATCH_GROUPS.filter((group) => selected.has(group));
 }
 
 export async function applyTrialChoice(ctx: BotContext, choice: "yes" | "no") {
@@ -186,7 +180,7 @@ export function registerOnboarding(bot: Bot<BotContext>) {
         draft.fillGrade = undefined;
         draft.step = "fill_grade";
       }
-      draft.watchGroups = defaultWatchGroups(propulsion);
+      draft.watchFuels = defaultWatchFuels(autoGrade ?? undefined);
       await promptOnboarding(ctx, draft);
       return;
     }
@@ -198,6 +192,7 @@ export function registerOnboarding(bot: Bot<BotContext>) {
         return;
       }
       draft.fillGrade = grade;
+      draft.watchFuels = defaultWatchFuels(grade);
       draft.step = "consumption";
       await promptOnboarding(ctx, draft);
       return;
@@ -242,8 +237,8 @@ export function registerOnboarding(bot: Bot<BotContext>) {
         }
         draft.dailyKm = value;
       }
-      if (!draft.watchGroups?.length) {
-        draft.watchGroups = defaultWatchGroups(draft.propulsion);
+      if (!draft.watchFuels?.length) {
+        draft.watchFuels = defaultWatchFuels(draft.fillGrade);
       }
       if (draft.resumeToSavings) {
         try {
@@ -263,36 +258,6 @@ export function registerOnboarding(bot: Bot<BotContext>) {
     }
 
     if (draft.step === "watch_fuels") {
-      const action = matchWatchAction(text);
-      if (!action) {
-        await promptOnboarding(ctx, draft);
-        return;
-      }
-      if (action === "done") {
-        if (!draft.watchGroups?.length) {
-          draft.watchGroups = defaultWatchGroups(draft.propulsion);
-        }
-        try {
-          await persistDraft(ctx, draft);
-        } catch {
-          await ctx.reply(t(locale, "errors.generic"));
-          return;
-        }
-        draft.step = "trial_consent";
-        await promptOnboarding(ctx, draft);
-        return;
-      }
-      const selected = new Set(draft.watchGroups ?? []);
-      if (selected.has(action)) {
-        selected.delete(action);
-      } else {
-        selected.add(action);
-      }
-      draft.watchGroups = orderedWatchGroups(selected);
-      ctx.session.onboarding = draft;
-      await ctx.reply(watchListText(locale, draft.watchGroups), {
-        reply_markup: watchGroupsKeyboard(locale, draft.watchGroups),
-      });
       return;
     }
 
@@ -307,5 +272,49 @@ export function registerOnboarding(bot: Bot<BotContext>) {
     }
 
     await next();
+  });
+
+  bot.callbackQuery(/^watch:(.+)$/, async (ctx) => {
+    const draft = ctx.session.onboarding;
+    if (!draft || draft.step !== "watch_fuels") {
+      await ctx.answerCallbackQuery();
+      return;
+    }
+    const locale = draft.locale ?? ctx.session.locale;
+    const token = ctx.match[1];
+
+    if (token === "back") {
+      await ctx.answerCallbackQuery();
+      await goBack(ctx, draft);
+      return;
+    }
+
+    if (token === "done") {
+      if (!draft.watchFuels?.length) {
+        draft.watchFuels = defaultWatchFuels(draft.fillGrade);
+      }
+      try {
+        await persistDraft(ctx, draft);
+      } catch {
+        await ctx.answerCallbackQuery();
+        await ctx.reply(t(locale, "errors.generic"));
+        return;
+      }
+      draft.step = "trial_consent";
+      await ctx.answerCallbackQuery();
+      await promptOnboarding(ctx, draft);
+      return;
+    }
+
+    if (!ALL_FUELS.includes(token as FuelKind)) {
+      await ctx.answerCallbackQuery();
+      return;
+    }
+    draft.watchFuels = toggleFuel(draft.watchFuels ?? [], token as FuelKind);
+    ctx.session.onboarding = draft;
+    await ctx.answerCallbackQuery();
+    await ctx.editMessageReplyMarkup({
+      reply_markup: watchFuelsInline(locale, draft.watchFuels),
+    });
   });
 }

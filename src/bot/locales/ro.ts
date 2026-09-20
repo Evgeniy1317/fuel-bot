@@ -8,8 +8,8 @@ export const ro: Messages = {
   },
   onboarding: {
     country: "🗺 De unde te alimentezi?",
-    countryPmr: "🏳 Transnistria",
-    countryMd: "🇲🇩 Moldova",
+    countryPmr: "Transnistria",
+    countryMd: "Moldova",
     city: "📍 În ce oraș te alimentezi? Scrie în rusă sau română.\nDe exemplu: {examples}",
     cityUnknown:
       "🤔 Nu am recunoscut orașul. Scrie din nou — în rusă sau română.\nDe exemplu: {examples}",
@@ -22,7 +22,7 @@ export const ro: Messages = {
     consumption: "📊 Consum mediu, l/100 km. De exemplu: 8.5",
     dailyKm: "🛣 Câți kilometri faci pe zi, aproximativ? De exemplu: 40",
     watchFuels:
-      "🔔 Pentru ce combustibili vrei alerte? Poți alege mai multe. Apasă din nou ca să scoți bifa. Când termini — «Gata».",
+      "🔔 Pentru ce combustibili vrei alerte? Bifează — poți alege mai multe, inclusiv sorturile de benzină. Când termini — «Gata».",
     watchSelected: "✅ Alerte: {list}",
     watchNone: "⚪️ Deocamdată nimic selectat.",
     watchDone: "✅ Gata",
@@ -93,5 +93,28 @@ export const ro: Messages = {
   errors: {
     number: "🔢 Trebuie un număr, încearcă din nou.",
     generic: "⚠️ Ceva n-a mers. Apasă /start.",
+  },
+  settings: {
+    title: "⚙️ Setări",
+    dash: "nespecificat",
+    hint: "✏️ Ce schimbi?",
+    language: "🌐 Limbă",
+    country: "🗺 Regiune",
+    city: "📍 Oraș",
+    fuel: "⛽ Combustibil",
+    consumption: "📊 Consum",
+    dailyKm: "🛣 Km/zi",
+    alerts: "🔔 Alerte",
+    close: "🏠 Meniu",
+    lineLang: "🌐 Limbă: {value}",
+    lineCountry: "🗺 Regiune: {value}",
+    lineCity: "📍 Oraș: {value}",
+    lineFuel: "⛽ Combustibil: {value}",
+    lineConsumption: "📊 Consum: {value}",
+    lineDailyKm: "🛣 Km/zi: {value}",
+    lineAlerts: "🔔 Alerte: {value}",
+    consumptionValue: "{n} l/100 km",
+    dailyKmValue: "{n} km",
+    saved: "✅ Salvat.",
   },
 };

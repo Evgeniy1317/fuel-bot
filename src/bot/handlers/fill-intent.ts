@@ -1,5 +1,4 @@
 import type { Bot } from "grammy";
-import { groupsFromFuels } from "../../config/constants";
 import { fillIntentRepo } from "../../repositories/fill-intent.repo";
 import { userRepo } from "../../repositories/user.repo";
 import type { OnboardingDraft } from "../../types";
@@ -101,7 +100,7 @@ async function resumeMissingProfile(ctx: BotContext): Promise<boolean> {
         ? undefined
         : Number(user.vehicle.litersPer100km),
     dailyKm: user.dailyKm == null ? undefined : Number(user.dailyKm),
-    watchGroups: groupsFromFuels(user.watchFuels),
+    watchFuels: user.watchFuels,
     resumeToSavings: true,
   };
 

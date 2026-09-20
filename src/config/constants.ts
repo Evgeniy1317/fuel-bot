@@ -30,8 +30,14 @@ export const WATCH_GROUPS: FuelWatchGroup[] = ["GASOLINE", "DIESEL", "LPG"];
 export const GASOLINE_GRADES: FuelKind[] = ["AI92", "AI95", "AI98"];
 export const ALL_FUELS: FuelKind[] = ["AI92", "AI95", "AI98", "DIESEL", "LPG"];
 
-export function expandWatchGroups(groups: FuelWatchGroup[]): FuelKind[] {
-  return groups.flatMap((group) => WATCH_GROUP_FUELS[group]);
+export function toggleFuel(selected: FuelKind[], fuel: FuelKind): FuelKind[] {
+  const set = new Set(selected);
+  if (set.has(fuel)) {
+    set.delete(fuel);
+  } else {
+    set.add(fuel);
+  }
+  return ALL_FUELS.filter((item) => set.has(item));
 }
 
 export function groupsFromFuels(fuels: FuelKind[]): FuelWatchGroup[] {

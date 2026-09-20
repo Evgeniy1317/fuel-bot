@@ -1,11 +1,10 @@
-import { Keyboard } from "grammy";
+import { InlineKeyboard, Keyboard } from "grammy";
 import {
+  ALL_FUELS,
   FUEL_LABELS,
   GASOLINE_GRADES,
-  WATCH_GROUP_LABELS,
-  WATCH_GROUPS,
 } from "../config/constants";
-import type { FuelWatchGroup, Locale } from "../types";
+import type { FuelKind, Locale } from "../types";
 import { t } from "./i18n";
 
 function navRow(kb: Keyboard, locale: Locale, opts: { skip?: boolean; back?: boolean }) {
@@ -63,14 +62,31 @@ export function fillGradeKeyboard(locale: Locale) {
   return navRow(kb, locale, { back: true });
 }
 
-export function watchGroupsKeyboard(locale: Locale, selected: FuelWatchGroup[]) {
-  const kb = new Keyboard();
-  for (const group of WATCH_GROUPS) {
-    const mark = selected.includes(group) ? "✓ " : "";
-    kb.text(`${mark}${WATCH_GROUP_LABELS[group][locale]}`).row();
+export function watchFuelsInline(locale: Locale, selected: FuelKind[], prefix = "watch") {
+  const kb = new InlineKeyboard();
+  for (const fuel of ALL_FUELS) {
+    const mark = selected.includes(fuel) ? "✅" : "⬜️";
+    kb.text(`${mark} ${FUEL_LABELS[fuel][locale]}`, `${prefix}:${fuel}`).row();
   }
-  kb.text(t(locale, "onboarding.watchDone"));
-  return navRow(kb, locale, { back: true });
+  kb.text(t(locale, "onboarding.watchDone"), `${prefix}:done`).row();
+  kb.text(t(locale, "onboarding.back"), `${prefix}:back`);
+  return kb;
+}
+
+export function settingsEditKeyboard(locale: Locale) {
+  return new InlineKeyboard()
+    .text(t(locale, "settings.language"), "set:language")
+    .text(t(locale, "settings.country"), "set:country")
+    .row()
+    .text(t(locale, "settings.city"), "set:city")
+    .text(t(locale, "settings.fuel"), "set:fuel")
+    .row()
+    .text(t(locale, "settings.consumption"), "set:consumption")
+    .text(t(locale, "settings.dailyKm"), "set:daily_km")
+    .row()
+    .text(t(locale, "settings.alerts"), "set:alerts")
+    .row()
+    .text(t(locale, "settings.close"), "set:close");
 }
 
 export function trialKeyboard(locale: Locale) {

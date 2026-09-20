@@ -1,4 +1,3 @@
-import { expandWatchGroups } from "../config/constants";
 import { userRepo } from "../repositories/user.repo";
 import { vehicleRepo } from "../repositories/vehicle.repo";
 import type { OnboardingDraft } from "../types";
@@ -11,7 +10,7 @@ export const onboardingService = {
       Boolean(draft.city) &&
       Boolean(draft.propulsion) &&
       Boolean(draft.fillGrade) &&
-      (draft.watchGroups?.length ?? 0) > 0
+      (draft.watchFuels?.length ?? 0) > 0
     );
   },
 
@@ -37,7 +36,7 @@ export const onboardingService = {
       country: draft.country!,
       city: draft.city!,
       dailyKm: draft.dailyKm ?? null,
-      watchFuels: expandWatchGroups(draft.watchGroups!),
+      watchFuels: draft.watchFuels!,
     });
 
     await vehicleRepo.upsertForUser(user.id, {

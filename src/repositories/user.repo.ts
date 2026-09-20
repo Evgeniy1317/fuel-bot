@@ -52,6 +52,22 @@ export const userRepo = {
     });
   },
 
+  async patch(
+    telegramId: string,
+    data: {
+      locale?: Locale;
+      country?: CountryCode;
+      city?: string | null;
+      dailyKm?: number | null;
+      watchFuels?: FuelKind[];
+    },
+  ) {
+    return prisma.user.update({
+      where: { telegramId },
+      data,
+    });
+  },
+
   async findWatchers(country: CountryCode, fuel: FuelKind) {
     return prisma.user.findMany({
       where: {

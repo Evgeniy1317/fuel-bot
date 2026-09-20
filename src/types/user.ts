@@ -1,7 +1,6 @@
 import type {
   CountryCode,
   FuelKind,
-  FuelWatchGroup,
   Locale,
   VehiclePropulsion,
 } from "./fuel";
@@ -30,7 +29,7 @@ export interface OnboardingDraft {
   fillGrade?: FuelKind;
   litersPer100km?: number;
   dailyKm?: number;
-  watchGroups?: FuelWatchGroup[];
+  watchFuels?: FuelKind[];
   resumeToSavings?: boolean;
 }
 
