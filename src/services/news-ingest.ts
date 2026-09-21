@@ -86,7 +86,7 @@ export const newsIngestService = {
         continue;
       }
 
-      const previous = await priceRepo.latest(price.country, price.fuel);
+      const previous = await priceRepo.latestSpot(price.country, price.fuel);
       await recommendationService.consider(bot, {
         source: origin,
         kind: inferKind(price.amount, previous ? Number(previous.amount) : undefined),
@@ -107,7 +107,7 @@ export const newsIngestService = {
 
   async ingestSpot(bot: Bot<BotContext>, prices: OfficialPrice[]) {
     for (const price of prices) {
-      const previous = await priceRepo.latest(price.country, price.fuel);
+      const previous = await priceRepo.latestSpot(price.country, price.fuel);
       if (previous && Number(previous.amount) === price.amount) {
         continue;
       }

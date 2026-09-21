@@ -112,7 +112,7 @@ export const recommendationService = {
     input: { source: string; country: CountryCode; fuel?: FuelKind; advisory?: boolean },
   ) {
     const fuel = input.fuel ?? (input.country === "MD" ? "AI95" : "AI95");
-    const latest = await priceRepo.latest(input.country, fuel);
+    const latest = await priceRepo.latestSpot(input.country, fuel);
     await this.consider(bot, {
       source: input.source,
       kind: "PREDICTED_HIKE",

@@ -1,13 +1,10 @@
 import type { Bot } from "grammy";
 import type { BotContext } from "../bot/context";
+import { chisinauDay, isFutureChisinauDay } from "../lib/time";
 import { newsEventRepo } from "../repositories/news-event.repo";
 import { priceRepo } from "../repositories/price.repo";
 import { recommendationService } from "./recommendation";
 import type { OfficialPrice } from "../types/price";
-
-function dayKey(date = new Date()) {
-  return date.toISOString().slice(0, 10);
-}
 
 function hoursUntil(date?: Date) {
   if (!date) {
@@ -31,14 +28,21 @@ export const predictionService = {
         continue;
       }
 
-      const externalId = `ceiling:${price.country}:${price.fuel}:${price.amount}:${dayKey(price.effectiveFrom)}`;
+      const externalId = `ceiling:${price.country}:${price.fuel}:${price.amount}:${chisinauDay(price.effectiveFrom ?? price.observedAt)}`;
       if (await newsEventRepo.alreadyProcessed("API", externalId)) {
         continue;
       }
 
-      const previous = await priceRepo.latest(price.country, price.fuel);
-      const prevAmount = previous ? Number(previous.amount) : undefined;
-      const isHike = prevAmount !== undefined && price.amount > prevAmount + 0.009;
+      const prevCeiling = await priceRepo.latestCeiling(price.country, price.fuel);
+      const spot = await priceRepo.latestSpot(price.country, price.fuel);
+      const baseline = prevCeiling
+        ? Number(prevCeiling.amount)
+        : spot
+          ? Number(spot.amount)
+          : undefined;
+      const isHike = baseline !== undefined && price.amount > baseline + 0.009;
+      const isDrop = baseline !== undefined && price.amount < baseline - 0.009;
+      const future = isFutureChisinauDay(price.effectiveFrom);
 
       await newsEventRepo.save({
         source: "API",
@@ -48,22 +52,32 @@ export const predictionService = {
         country: price.country,
       });
 
-      if (!isHike) {
+      await priceRepo.insert({
+        country: price.country,
+        fuel: price.fuel,
+        amount: price.amount,
+        currencyCode: price.currencyCode,
+        source: "API",
+        sourceRef: "CEILING",
+        publishedAt: price.effectiveFrom ?? price.observedAt,
+      });
+
+      if (!isHike && !isDrop) {
         continue;
       }
 
-      if (price.country === "MD") {
+      if (isHike && price.country === "MD") {
         mdHike = true;
       }
 
       await recommendationService.consider(bot, {
         source: "ceiling",
-        kind: "PREDICTED_HIKE",
+        kind: isDrop ? "PRICE_DOWN" : future ? "PREDICTED_HIKE" : "PRICE_UP",
         country: price.country,
         fuel: price.fuel,
         amount: price.amount,
         currencyCode: price.currencyCode,
-        previousAmount: prevAmount,
+        previousAmount: baseline,
         windowHours: hoursUntil(price.effectiveFrom),
       });
     }
@@ -74,7 +88,7 @@ export const predictionService = {
   },
 
   async pmrHeadsUp(bot: Bot<BotContext>) {
-    const externalId = `pmr-heads-up:${dayKey()}`;
+    const externalId = `pmr-heads-up:${chisinauDay()}`;
     if (await newsEventRepo.alreadyProcessed("API", externalId)) {
       return;
     }
@@ -85,7 +99,7 @@ export const predictionService = {
       country: "PMR",
     });
 
-    const current95 = await priceRepo.latest("PMR", "AI95");
+    const current95 = await priceRepo.latestSpot("PMR", "AI95");
     await recommendationService.consider(bot, {
       source: "ceiling",
       kind: "PREDICTED_HIKE",

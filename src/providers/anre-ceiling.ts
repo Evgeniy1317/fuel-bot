@@ -23,8 +23,10 @@ function firstStrong(html: string, label: RegExp): number | null {
   return match ? parseLei(match[1]!) : null;
 }
 
-export async function fetchAnreCeiling(): Promise<OfficialPrice[]> {
-  const result = await politeGet(SOURCES.anreSite, FETCH_LIMITS.anreSiteMs, BROWSER_UA);
+export async function fetchAnreCeiling(force = false): Promise<OfficialPrice[]> {
+  const result = await politeGet(SOURCES.anreSite, FETCH_LIMITS.anreSiteMs, BROWSER_UA, {
+    force,
+  });
   if (!result.ok) {
     return [];
   }

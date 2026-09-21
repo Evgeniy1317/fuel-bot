@@ -4,15 +4,34 @@ import type { PriceSource } from "@prisma/client";
 
 export const priceRepo = {
   async latest(country: CountryCode, fuel: FuelKind) {
+    return this.latestSpot(country, fuel);
+  },
+
+  async latestSpot(country: CountryCode, fuel: FuelKind) {
     return prisma.priceHistory.findFirst({
-      where: { region: { country }, fuel },
+      where: {
+        region: { country },
+        fuel,
+        NOT: { sourceRef: "CEILING" },
+      },
+      orderBy: { observedAt: "desc" },
+    });
+  },
+
+  async latestCeiling(country: CountryCode, fuel: FuelKind) {
+    return prisma.priceHistory.findFirst({
+      where: { region: { country }, fuel, sourceRef: "CEILING" },
       orderBy: { observedAt: "desc" },
     });
   },
 
   async previousAmount(country: CountryCode, fuel: FuelKind, current: number) {
     const rows = await prisma.priceHistory.findMany({
-      where: { region: { country }, fuel },
+      where: {
+        region: { country },
+        fuel,
+        NOT: { sourceRef: "CEILING" },
+      },
       orderBy: { observedAt: "desc" },
       take: 12,
       select: { amount: true },

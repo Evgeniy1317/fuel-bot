@@ -85,18 +85,53 @@ function stationInCity(station: AnreStation, city: City) {
   return fields.some((field) => needles.some((needle) => namesMatch(field, needle)));
 }
 
-function stationPrices(station: AnreStation, watch: FuelKind[]) {
+function plausibleBand(fuel: "gasoline" | "diesel" | "gpl", amount: number) {
+  if (fuel === "gpl") {
+    return amount >= 8 && amount <= 28;
+  }
+  return amount >= 18 && amount <= 48;
+}
+
+function nearAnchor(amount: number, anchor: number | null, fuel: "gasoline" | "diesel" | "gpl") {
+  if (!anchor) {
+    return true;
+  }
+  const floor = fuel === "gpl" ? 0.82 : 0.92;
+  const ceil = fuel === "gpl" ? 1.22 : 1.15;
+  return amount >= anchor * floor && amount <= anchor * ceil;
+}
+
+function stationPrices(
+  station: AnreStation,
+  watch: FuelKind[],
+  anchors: { gasoline: number | null; diesel: number | null; gpl: number | null },
+) {
   const prices: { fuel: FuelKind; amount: number }[] = [];
-  if (station.gasoline && watch.includes("AI95")) {
+  if (
+    station.gasoline &&
+    watch.includes("AI95") &&
+    plausibleBand("gasoline", station.gasoline) &&
+    nearAnchor(station.gasoline, anchors.gasoline, "gasoline")
+  ) {
     prices.push({ fuel: "AI95", amount: station.gasoline });
   }
-  if (station.diesel && watch.some((fuel) => DIESEL_GRADES.includes(fuel))) {
+  if (
+    station.diesel &&
+    watch.some((fuel) => DIESEL_GRADES.includes(fuel)) &&
+    plausibleBand("diesel", station.diesel) &&
+    nearAnchor(station.diesel, anchors.diesel, "diesel")
+  ) {
     prices.push({
       fuel: watch.includes("DIESEL_EURO") ? "DIESEL_EURO" : "DIESEL",
       amount: station.diesel,
     });
   }
-  if (watch.includes("LPG") && station.gpl) {
+  if (
+    watch.includes("LPG") &&
+    station.gpl &&
+    plausibleBand("gpl", station.gpl) &&
+    nearAnchor(station.gpl, anchors.gpl, "gpl")
+  ) {
     prices.push({ fuel: "LPG", amount: station.gpl });
   }
   return prices;
@@ -128,13 +163,13 @@ export async function fetchAnreStations(force = false): Promise<OfficialPrice[]>
     if (station.station_status !== 1) {
       continue;
     }
-    if (station.gasoline) {
+    if (station.gasoline && plausibleBand("gasoline", station.gasoline)) {
       gasoline.push(station.gasoline);
     }
-    if (station.diesel) {
+    if (station.diesel && plausibleBand("diesel", station.diesel)) {
       diesel.push(station.diesel);
     }
-    if (station.gpl) {
+    if (station.gpl && plausibleBand("gpl", station.gpl)) {
       gpl.push(station.gpl);
     }
   }
@@ -146,19 +181,45 @@ export async function fetchAnreStations(force = false): Promise<OfficialPrice[]>
   return prices;
 }
 
+function nationalAnchors(stations: AnreStation[]) {
+  const gasoline: number[] = [];
+  const diesel: number[] = [];
+  const gpl: number[] = [];
+  for (const station of stations) {
+    if (station.station_status !== 1) {
+      continue;
+    }
+    if (station.gasoline && plausibleBand("gasoline", station.gasoline)) {
+      gasoline.push(station.gasoline);
+    }
+    if (station.diesel && plausibleBand("diesel", station.diesel)) {
+      diesel.push(station.diesel);
+    }
+    if (station.gpl && plausibleBand("gpl", station.gpl)) {
+      gpl.push(station.gpl);
+    }
+  }
+  return {
+    gasoline: median(gasoline),
+    diesel: median(diesel),
+    gpl: median(gpl),
+  };
+}
+
 export async function fetchAnreCityStations(
   city: City,
   watch: FuelKind[],
   limit = 8,
 ): Promise<StationQuote[]> {
   const stations = await loadStations(true);
+  const anchors = nationalAnchors(stations);
   const quotes: StationQuote[] = [];
 
   for (const station of stations) {
     if (station.station_status !== 1 || !stationInCity(station, city)) {
       continue;
     }
-    const prices = stationPrices(station, watch);
+    const prices = stationPrices(station, watch, anchors);
     if (!prices.length) {
       continue;
     }

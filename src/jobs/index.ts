@@ -6,6 +6,7 @@ import { SITE_SOURCES, telegramMeta } from "../config/news-sources";
 import { newsIngestService } from "../services/news-ingest";
 import { priceProvider } from "../services/price-provider";
 import { guaranteeService } from "../services/guarantee";
+import { digestService } from "../services/digest";
 import { fetchTelegramPreview } from "../providers/telegram-preview";
 import { fetchNewsSite } from "../providers/news-sites";
 
@@ -68,7 +69,7 @@ export function startJobs(bot: Bot<BotContext>) {
     "8,20,32,44,56 * * * *",
     () =>
       safe("tg-preview", async () => {
-        const { items, cursor } = nextBatch(env.TELEGRAM_PREVIEW_CHANNELS, tgCursor, 1);
+        const { items, cursor } = nextBatch(env.TELEGRAM_PREVIEW_CHANNELS, tgCursor, 2);
         tgCursor = cursor;
         for (const channel of items) {
           const posts = await fetchTelegramPreview(channel);
@@ -81,7 +82,7 @@ export function startJobs(bot: Bot<BotContext>) {
               rawText: post.text,
               channelId: post.channel,
               countryHint: meta?.country,
-              skipAlerts: ageMs > 90 * 60 * 1000,
+              skipAlerts: ageMs > 18 * 60 * 60 * 1000,
             });
           }
         }
@@ -108,10 +109,28 @@ export function startJobs(bot: Bot<BotContext>) {
               rawText: article.text,
               channelId: url,
               countryHint: article.country,
-            skipAlerts: !article.at || (Number.isFinite(ageMs) && ageMs > 12 * 60 * 60 * 1000),
+              skipAlerts: Boolean(article.at) && Number.isFinite(ageMs) && ageMs > 18 * 60 * 60 * 1000,
             });
           }
         }
+      }),
+    { timezone: env.TZ },
+  );
+
+  cron.schedule(
+    "25 8 * * *",
+    () =>
+      safe("digest-morning", async () => {
+        await digestService.sendMorning(bot);
+      }),
+    { timezone: env.TZ },
+  );
+
+  cron.schedule(
+    "40 17 * * *",
+    () =>
+      safe("digest-evening", async () => {
+        await digestService.sendEvening(bot);
       }),
     { timezone: env.TZ },
   );
@@ -124,4 +143,24 @@ export function startJobs(bot: Bot<BotContext>) {
       }),
     { timezone: env.TZ },
   );
+
+  setTimeout(() => {
+    void safe("digest-catchup", async () => {
+      const hourRaw = Number(
+        new Intl.DateTimeFormat("en-GB", {
+          timeZone: env.TZ,
+          hour: "numeric",
+          hour12: false,
+        })
+          .formatToParts(new Date())
+          .find((part) => part.type === "hour")?.value,
+      );
+      const hour = hourRaw === 24 ? 0 : hourRaw;
+      if (hour >= 18) {
+        await digestService.sendEvening(bot);
+      } else if (hour >= 9) {
+        await digestService.sendMorning(bot);
+      }
+    });
+  }, 20_000);
 }

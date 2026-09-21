@@ -52,6 +52,17 @@ export const ro: Messages = {
     map: "{n} hartă",
     needCity: "📍 Mai întâi puneți orașul în setări.",
   },
+  digest: {
+    morning: "⛽ Prețurile dimineața",
+    evening: "⛽ Recomandare pentru mâine",
+    now: "acum  {amount}",
+    tomorrow: "mâine  {amount}",
+    yesterday: "ieri  {amount}",
+    fill: "merită să alimentați azi",
+    wait: "puteți aștepta",
+    hold: "prețul se menține",
+    mdHeadsUp: "în Moldova mâine, cel mai probabil, e mai scump. Merită să alimentați azi.",
+  },
   calc: {
     ask: "Alegeți combustibilul.",
     amount: "Pe ce sumă doriți să alimentați?\n\nIntroduceți orice număr.",

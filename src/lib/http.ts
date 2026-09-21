@@ -96,10 +96,10 @@ async function doGet(
     Accept: "text/html,application/rss+xml,application/xml,application/json;q=0.9,*/*;q=0.8",
     "Accept-Language": "ru,ro,en;q=0.8",
   };
-  if (cache.etag) {
+  if (!force && cache.etag) {
     headers["If-None-Match"] = cache.etag;
   }
-  if (cache.lastModified) {
+  if (!force && cache.lastModified) {
     headers["If-Modified-Since"] = cache.lastModified;
   }
 

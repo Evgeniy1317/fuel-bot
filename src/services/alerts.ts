@@ -15,7 +15,7 @@ import { savingsService } from "./savings";
 import { subscriptionService } from "./subscription";
 
 const recent = new Map<string, number>();
-const DEDUP_MS = 6 * 60 * 60 * 1000;
+const DEDUP_MS = 3 * 60 * 60 * 1000;
 
 function alreadySent(key: string) {
   const prev = recent.get(key);
@@ -108,7 +108,7 @@ export const alertService = {
         : undefined;
 
     const askFill = input.kind === "PREDICTED_HIKE";
-    const spot = askFill ? await priceRepo.latest(input.country, input.fuel) : null;
+    const spot = askFill ? await priceRepo.latestSpot(input.country, input.fuel) : null;
     const fillPrice = spot ? Number(spot.amount) : input.amount;
 
     for (const user of users) {
